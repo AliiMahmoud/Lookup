@@ -1,0 +1,12 @@
+/* Lookup styles, one file per area. Order matters (later rules win ties). */
+@import url('styles/tokens.css');
+@import url('styles/titlebar.css');
+@import url('styles/controls.css');
+@import url('styles/welcome.css');
+@import url('styles/workspace.css');
+@import url('styles/grid.css');
+@import url('styles/editor.css');
+@import url('styles/query.css');
+@import url('styles/table-design.css');
+@import url('styles/dialogs.css');
+@import url('styles/sqllog.css');

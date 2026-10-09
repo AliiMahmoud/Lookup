@@ -1,0 +1,61 @@
+{
+  "name": "lookup",
+  "productName": "Lookup",
+  "version": "0.1.0",
+  "description": "A fast, native-feeling desktop client for Oracle Database",
+  "main": "src/main/main.js",
+  "author": "Ali",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/run.js && node test/binds-test.js && node test/export-test.js && node test/alter-test.js && node test/lost-test.js",
+    "dist:win": "electron-builder --win nsis --x64",
+    "dist:portable": "electron-builder --win portable --x64",
+    "dist:zip": "electron-builder --win zip --x64"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "oracledb": "^7.0.1",
+    "sql-formatter": "^15.9.0"
+  },
+  "devDependencies": {
+    "electron": "^44.6.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.lookup.app",
+    "productName": "Lookup",
+    "files": [
+      "build/icon.ico",
+      "build/icon.png",
+      "package.json",
+      "src/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "Lookup-${version}-portable.exe"
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "publish": null,
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "icon": "build/icon.png"
+    }
+  }
+}

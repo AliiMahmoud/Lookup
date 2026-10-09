@@ -1,0 +1,103 @@
+/* Design tokens: colours, fonts and sizes, light and dark. */
+
+:root {
+  --sidebar-w: 260px;
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono", Menlo, monospace;
+
+  --bg: #fbfbfa;
+  --panel: #f4f4f2;
+  --side: #f0f0ec;
+  --raised: #ffffff;
+  --border: #e3e3de;
+  --border-strong: #d2d2cc;
+  --text: #1f2126;
+  --muted: #6b6f78;
+  --faint: #9a9ea6;
+  --hover: rgba(30, 32, 38, 0.055);
+  --active: rgba(30, 32, 38, 0.09);
+  --accent: #cf4f2b;
+  --accent-text: #ffffff;
+  --accent-soft: rgba(207, 79, 43, 0.12);
+  --sel-row: rgba(207, 79, 43, 0.08);
+  --sel-cell: rgba(207, 79, 43, 0.2);
+  --ok: #2c8a52;
+  --err: #c7362f;
+  --warn: #b77a10;
+  --edited: rgba(232, 178, 30, 0.28);
+  --ins: rgba(44, 138, 82, 0.11);
+  --del: rgba(199, 54, 47, 0.1);
+  --shadow: 0 12px 40px rgba(20, 22, 28, 0.18), 0 2px 6px rgba(20, 22, 28, 0.08);
+
+  --env-none: #9a9ea6;
+  --env-local: #3c9a63;
+  --env-dev: #3a78c9;
+  --env-staging: #c98a1b;
+  --env-prod: #d23c3c;
+
+  --t-kw: #7444c9;
+  --t-fn: #1d68b3;
+  --t-str: #2b7d45;
+  --t-num: #b25500;
+  --t-com: #8a8f98;
+  --t-id: #a13b78;
+  --t-bind: #c0560c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181c;
+    --panel: #1b1d22;
+    --side: #191b1f;
+    --raised: #22252b;
+    --border: #2a2d34;
+    --border-strong: #363a42;
+    --text: #e3e5e9;
+    --muted: #8d929c;
+    --faint: #686d77;
+    --hover: rgba(255, 255, 255, 0.05);
+    --active: rgba(255, 255, 255, 0.085);
+    --accent: #ee6c47;
+    --accent-text: #1a0e0a;
+    --accent-soft: rgba(238, 108, 71, 0.16);
+    --sel-row: rgba(238, 108, 71, 0.09);
+    --sel-cell: rgba(238, 108, 71, 0.26);
+    --ok: #5cc285;
+    --err: #f06b62;
+    --warn: #e0a83a;
+    --edited: rgba(232, 178, 30, 0.22);
+    --ins: rgba(92, 194, 133, 0.12);
+    --del: rgba(240, 107, 98, 0.12);
+    --shadow: 0 14px 44px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
+
+    --t-kw: #b796f5;
+    --t-fn: #7ab7ff;
+    --t-str: #86d69c;
+    --t-num: #f3a35c;
+    --t-com: #6f7581;
+    --t-id: #e590c5;
+    --t-bind: #f0a060;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body {
+  font: 12.5px/1.45 var(--font);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+input, textarea, select, button { font: inherit; color: inherit; }
+button { cursor: default; }
+.hidden { display: none !important; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); font-size: 12px; }
+.strong { font-weight: 600; }
+.spacer { flex: 1; }
+.scroll { overflow: auto; }
+.warn { color: var(--warn); }
+body.resizing, body.resizing * { cursor: col-resize !important; }
+
+#app { display: flex; flex-direction: column; height: 100vh; }

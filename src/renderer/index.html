@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:" />
+  <title>Lookup</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="titlebar" class="titlebar"></header>
+    <div id="welcome" class="welcome hidden"></div>
+    <div id="workspace" class="workspace hidden">
+      <aside id="sidebar" class="sidebar"></aside>
+      <div id="sb-resizer" class="sb-resizer"></div>
+      <main class="main">
+        <div id="tabbar" class="tabbar"></div>
+        <div id="tabviews" class="tabviews">
+          <div id="empty-state" class="empty-state">
+            <div class="empty-mark"></div>
+            <h2>Pick a table from the sidebar</h2>
+            <p class="muted">or start writing SQL</p>
+            <div class="shortcuts">
+              <div><kbd>Ctrl</kbd><kbd>T</kbd><span>New query</span></div>
+              <div><kbd>Ctrl</kbd><kbd>P</kbd><span>Open anything</span></div>
+              <div><kbd>Ctrl</kbd><kbd>Enter</kbd><span>Run statement</span></div>
+              <div><kbd>Ctrl</kbd><kbd>S</kbd><span>Commit</span></div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <footer id="statusbar" class="statusbar"></footer>
+  </div>
+  <div id="modal-root"></div>
+  <div id="toast-root"></div>
+
+  <script src="../shared/sqlsplit.js"></script>
+  <script src="js/util.js"></script>
+  <script src="js/editor.js"></script>
+  <script src="js/grid.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/create-table.js"></script>
+  <script src="js/structure.js"></script>
+  <script src="js/sqllog.js"></script>
+  <!-- The workspace, one feature per file; they share window.Lookup. boot.js starts it and must be last. -->
+  <script src="js/app/core.js"></script>
+  <script src="js/app/status.js"></script>
+  <script src="js/app/connections.js"></script>
+  <script src="js/app/conn-io.js"></script>
+  <script src="js/app/workspace.js"></script>
+  <script src="js/app/sidebar.js"></script>
+  <script src="js/app/tabs.js"></script>
+  <script src="js/app/table-tab.js"></script>
+  <script src="js/app/table-design.js"></script>
+  <script src="js/app/exports.js"></script>
+  <script src="js/app/query-tab.js"></script>
+  <script src="js/app/settings.js"></script>
+  <script src="js/app/boot.js"></script>
+</body>
+</html>

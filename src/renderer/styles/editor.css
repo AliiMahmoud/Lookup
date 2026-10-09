@@ -1,0 +1,66 @@
+/* SQL editor. */
+
+/* ---------- Editor ---------- */
+.tabview.query .ed-host { flex: 0 1 42%; min-height: 80px; display: flex; } /* shrinks first when the SQL log grows */
+.hsplit { flex: 0 0 5px; cursor: row-resize; border-top: 1px solid var(--border); background: var(--panel); }
+.hsplit:hover { background: var(--accent-soft); }
+.results { flex: 1; display: flex; flex-direction: column; min-height: 170px; }
+.res-tabs { display: flex; gap: 2px; padding: 4px 8px 0; background: var(--panel); border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+.res-tab { height: 28px; padding: 0 10px; border: 0; border-radius: 7px 7px 0 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 500; }
+.res-tab:hover { color: var(--text); }
+.res-tab.on { background: var(--bg); color: var(--text); box-shadow: 0 0 0 1px var(--border); clip-path: inset(-2px -2px 0 -2px); }
+.res-tab.err { color: var(--err); }
+.res-body { flex: 1; display: flex; position: relative; min-height: 0; }
+.messages { flex: 1; padding: 10px 14px; user-select: text; }
+.msg { padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 8px; background: var(--raised); }
+.msg-head { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.msg-head .muted { margin-left: auto; font-weight: 400; }
+.msg.ok .msg-head .ic { color: var(--ok); }
+.msg.err { border-color: color-mix(in srgb, var(--err) 35%, var(--border)); }
+.msg.err .msg-head { color: var(--err); }
+.msg .err-text { margin-top: 6px; }
+.msg-sql { margin-top: 4px; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dbms-out { margin: 8px 0 0; padding: 8px 10px; border-radius: 6px; background: var(--panel); font: 12px/1.5 var(--mono); white-space: pre-wrap; }
+
+.editor { flex: 1; display: flex; overflow: hidden; background: var(--bg); position: relative; }
+.ed-gutter {
+  flex: 0 0 46px; padding: 10px 8px 10px 0; text-align: right; color: var(--faint); background: var(--bg);
+  font: var(--ed-fs, 12.5px)/var(--ed-lh, 20px) var(--mono); position: relative; z-index: 1; will-change: transform;
+}
+.ed-gutter div { height: var(--ed-lh, 20px); padding-right: 4px; border-right: 2px solid transparent; }
+.ed-gutter div.cur { color: var(--text); border-right-color: var(--accent); }
+.ed-code { flex: 1; position: relative; overflow: hidden; }
+.ed-hl, .ed-input {
+  margin: 0; padding: 10px 14px 10px 10px; font: var(--ed-fs, 12.5px)/var(--ed-lh, 20px) var(--mono); tab-size: 4; white-space: pre; letter-spacing: 0;
+  font-variant-ligatures: none;
+}
+.ed-hl { position: absolute; top: 0; left: 0; min-width: 100%; pointer-events: none; color: var(--text); will-change: transform; }
+.ed-input {
+  position: absolute; inset: 0; width: 100%; height: 100%; resize: none; border: 0; outline: none;
+  background: transparent; color: transparent; caret-color: var(--accent); overflow: auto; user-select: text;
+}
+.ed-input::selection { background: var(--sel-cell); color: transparent; }
+.t-kw { color: var(--t-kw); font-weight: 600; }
+.t-fn { color: var(--t-fn); }
+.t-str { color: var(--t-str); }
+.t-num { color: var(--t-num); }
+.t-com { color: var(--t-com); font-style: italic; }
+.t-id { color: var(--t-id); }
+.t-bind { color: var(--t-bind); }
+
+.ac {
+  position: absolute; z-index: 10; min-width: 260px; max-width: 420px; max-height: 240px; overflow: auto;
+  background: var(--raised); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: var(--shadow); padding: 4px;
+}
+.ac-item { display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 6px; border-radius: 5px; font: 12px var(--mono); }
+.ac-item.sel { background: var(--accent-soft); }
+.ac-kind { width: 16px; height: 16px; border-radius: 4px; display: grid; place-items: center; font: 700 9.5px var(--font); color: #fff; flex: 0 0 16px; }
+.k-table { background: #3a78c9; } .k-view { background: #2c8a7a; } .k-column { background: #b77a10; }
+.k-keyword { background: #7444c9; } .k-function { background: #1d68b3; } .k-object { background: #6b6f78; } .k-schema { background: #cf4f2b; }
+.ac-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.ac-detail { color: var(--faint); font-size: 11px; }
+
+/* Editor zoom percentage, shown briefly in the corner of the SQL editor */
+.ed-zoom { position: absolute; right: 12px; top: 8px; z-index: 3; padding: 2px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 600;
+  background: var(--raised); border: 1px solid var(--border); color: var(--muted); pointer-events: none; opacity: 0; transition: opacity .15s; }
+.ed-zoom.show { opacity: 1; }

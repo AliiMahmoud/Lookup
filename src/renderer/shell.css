@@ -1,0 +1,56 @@
+/* Window chrome: title bar on top and a rail of open connections on the left.
+   The connection workspaces are drawn to the right of the rail, below the title bar. */
+:root { --rail-w: 76px; }
+html, body.shell { height: 100%; overflow: hidden; background: var(--panel); }
+.shellbar { gap: 10px; }
+.active-conn { display: flex; align-items: center; gap: 8px; min-width: 0; margin-left: 10px; white-space: nowrap; }
+.active-conn .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.active-conn .meta { color: var(--muted); }
+.active-conn .env-tag { margin-left: 0; }
+
+.rail {
+  position: fixed; top: 40px; left: 0; bottom: 0; width: var(--rail-w);
+  display: flex; flex-direction: column; align-items: stretch;
+  background: var(--side); border-right: 1px solid var(--border);
+}
+.rail-list { display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; }
+.rail-list::-webkit-scrollbar { width: 0; }
+.rail-tile {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  height: 76px; padding: 6px 4px; border-bottom: 1px solid var(--border); color: var(--muted); cursor: default;
+}
+.rail-tile:hover { background: var(--hover); color: var(--text); }
+.rail-tile.active { background: var(--bg); color: var(--text); }
+.rail-tile.active::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--c, var(--accent)); }
+.rail-tile .ic { width: 24px; height: 24px; flex-basis: 24px; color: var(--c, var(--muted)); }
+.rail-tile .ic svg { width: 24px; height: 24px; stroke-width: 1.2; }
+.rail-tile.empty .ic { color: var(--faint); }
+.rail-name {
+  max-width: 100%; font-size: 10px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;
+}
+.rail-tile.empty .rail-name { text-transform: none; font-weight: 500; font-style: italic; }
+.rail-tx { position: absolute; top: 9px; right: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 2px var(--side); }
+.rail-tile.active .rail-tx { box-shadow: 0 0 0 2px var(--bg); }
+.rail-x {
+  position: absolute; top: 4px; right: 4px; display: none; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border: 0; border-radius: 5px; background: transparent; color: var(--faint);
+}
+.rail-tile:hover .rail-x { display: inline-flex; }
+.rail-tile:hover .rail-tx { display: none; }
+.rail-x:hover { background: var(--active); color: var(--text); }
+.rail-x .ic, .rail-x .ic svg { width: 12px; height: 12px; }
+.rail-tile.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.rail-tile.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.rail-add {
+  display: flex; align-items: center; justify-content: center; height: 52px; flex: 0 0 52px;
+  border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--muted);
+}
+.rail-add:hover { background: var(--hover); color: var(--text); }
+.rail-add .ic, .rail-add .ic svg { width: 20px; height: 20px; }
+.tb-left { margin-left: 20px; }
+.tb-left:empty { display: none; }
+.tb-btn .caret { font-size: 9px; color: var(--muted); margin-left: -3px; }
+.tb-settings { margin-left: 2px; color: var(--muted); }
+.tb-settings:hover { color: var(--text); }
+.tb-settings .ic, .tb-settings .ic svg { width: 16px; height: 16px; }
