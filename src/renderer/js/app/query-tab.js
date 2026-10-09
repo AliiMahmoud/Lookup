@@ -304,12 +304,12 @@
   function saveQueryTabs() {
     if (!S.current) return;
     const tabs = S.tabs.filter((t) => t.kind === 'query').map((t) => ({ title: t.title, text: t.editor.value, zoom: t.editor.zoom !== 100 ? t.editor.zoom : undefined }));
-    try { localStorage.setItem('oradesk.queries.' + S.current.id, JSON.stringify(tabs)); } catch { /* storage full */ }
+    try { localStorage.setItem('lookup.queries.' + S.current.id, JSON.stringify(tabs)); } catch { /* storage full */ }
   }
   function restoreQueryTabs() {
     queryNo = 0;
     let tabs = [];
-    try { tabs = JSON.parse(localStorage.getItem('oradesk.queries.' + S.current.id) || '[]'); } catch { tabs = []; }
+    try { tabs = JSON.parse(localStorage.getItem('lookup.queries.' + S.current.id) || '[]'); } catch { tabs = []; }
     tabs.forEach((t) => { const tab = openQueryTab({ title: t.title, text: t.text }); if (t.zoom && tab && tab.editor) tab.editor.setZoom(t.zoom); });
     const nums = tabs.map((t) => Number((t.title.match(/^Query (\d+)$/) || [])[1] || 0));
     queryNo = Math.max(0, ...nums);

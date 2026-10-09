@@ -13,7 +13,7 @@
   }
   async function enterWorkspace() {
     S.lost = null;
-    if (sqlLogInst) sqlLogInst.reset(); else if (localStorage.getItem('oradesk.sqllog.open') === 'true') sqlLogPanel();
+    if (sqlLogInst) sqlLogInst.reset(); else if (localStorage.getItem('lookup.sqllog.open') === 'true') sqlLogPanel();
     $('#welcome').classList.add('hidden');
     $('#workspace').classList.remove('hidden');
     S.tabs.forEach((t) => { t.destroy && t.destroy(); t.el.remove(); });

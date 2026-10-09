@@ -103,7 +103,7 @@ app.on('browser-window-created', (_e, win) => {
       await ws.executeJavaScript(`document.querySelector('.sb-search-clear').click(); 1`);
 
       // 3. Editor zoom is remembered with the query tab.
-      out.savedTab = await ws.executeJavaScript(`(JSON.parse(localStorage.getItem('oradesk.queries.' + Lookup.S.current.id))[0] || {}).zoom`);
+      out.savedTab = await ws.executeJavaScript(`(JSON.parse(localStorage.getItem('lookup.queries.' + Lookup.S.current.id))[0] || {}).zoom`);
       console.log('SMOKE-ZOOM', JSON.stringify(out));
     } catch (e) { console.log('SMOKE-ZOOM FAILED', e.stack); }
     fs.rmSync(app.getPath('userData'), { recursive: true, force: true });

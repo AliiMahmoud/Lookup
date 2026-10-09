@@ -11,7 +11,7 @@ for (const f of (process.env.BENCH_SWITCHES || '').split(' ').filter(Boolean)) {
   app.commandLine.appendSwitch(k, v);
 }
 if (process.env.BENCH_NOGPU) app.disableHardwareAcceleration();
-app.setPath('userData', path.join(app.getPath('temp'), 'oradesk-bench'));
+app.setPath('userData', path.join(app.getPath('temp'), 'lookup-bench'));
 fs.rmSync(app.getPath('userData'), { recursive: true, force: true });
 
 // ---------- simulated database (replaces the Oracle layer) ----------

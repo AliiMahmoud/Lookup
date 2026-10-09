@@ -250,13 +250,13 @@
         document.body.classList.remove('resizing');
         removeEventListener('mousemove', move);
         removeEventListener('mouseup', up);
-        try { localStorage.setItem('oradesk.sidebarW', getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w')); } catch { /* ignore */ }
+        try { localStorage.setItem('lookup.sidebarW', getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w')); } catch { /* ignore */ }
       };
       addEventListener('mousemove', move);
       addEventListener('mouseup', up);
     });
     try {
-      const w = localStorage.getItem('oradesk.sidebarW');
+      const w = localStorage.getItem('lookup.sidebarW');
       if (w) document.documentElement.style.setProperty('--sidebar-w', w);
     } catch { /* ignore */ }
   }

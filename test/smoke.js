@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { app, BrowserWindow, webContents } = require('electron');
 
-app.setPath('userData', path.join(app.getPath('temp'), 'oradesk-smoke'));
+app.setPath('userData', path.join(app.getPath('temp'), 'lookup-smoke'));
 require('../src/main/main.js');
 
 app.on('browser-window-created', (_e, win) => {
@@ -20,7 +20,7 @@ app.on('browser-window-created', (_e, win) => {
         out.list = (await window.api.listConnections()).map((c) => c.name + ':' + c.hasPassword);
         try { await window.api.testConnection({ user: 'x', password: 'y', host: '127.0.0.1', port: 1599, service: 'FREEPDB1' }); out.test = 'connected?'; }
         catch (e) { out.test = e.message.split('\\n')[0]; }
-        const xf = ${JSON.stringify(require('path').join(require('os').tmpdir(), 'oradesk-smoke.xlsx'))};
+        const xf = ${JSON.stringify(require('path').join(require('os').tmpdir(), 'lookup-smoke.xlsx'))};
         const seen = [];
         const off = window.api.onExportProgress((p) => seen.push(p.rows));
         const r = await window.api.exportRun({ jobId: 'j1', source: 'rows', format: 'xlsx', filePath: xf, options: { header: true },
@@ -32,7 +32,7 @@ app.on('browser-window-created', (_e, win) => {
         out.sqlLog = await window.api.sqlLog(0);
         return out;
       })()`);
-      res.xlsxBytes = fs.statSync(require('path').join(require('os').tmpdir(), 'oradesk-smoke.xlsx')).size;
+      res.xlsxBytes = fs.statSync(require('path').join(require('os').tmpdir(), 'lookup-smoke.xlsx')).size;
       const stored = fs.readFileSync(path.join(app.getPath('userData'), 'connections.json'), 'utf8');
       res.passwordStoredPlain = stored.includes('secret');
       const img = await ws.capturePage();

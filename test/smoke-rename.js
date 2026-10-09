@@ -41,6 +41,13 @@ app.on('browser-window-created', (_e, win) => {
       const now = app.getPath('userData');
       out.migrated = ['connections.json', 'history.json', 'Local State', 'Local Storage/leveldb/000003.log'].filter((f) => fs.existsSync(path.join(now, f)));
       out.windowTitle = win.getTitle();
+      // Saved window state under the old "oradesk." keys moves to "lookup." on the next load.
+      const ws0 = webContents.getAllWebContents().find((w) => w.getURL().includes('index.html'));
+      await ws0.executeJavaScript(`localStorage.setItem('oradesk.sidebarW', '333px'); localStorage.setItem('oradesk.queries.abc', '[{"title":"Q","text":"select 1"}]'); localStorage.setItem('oradesk.sqllog.open', 'true'); localStorage.setItem('lookup.sqllog.open', 'false'); 1`);
+      ws0.reload();
+      await new Promise((r) => ws0.once('did-finish-load', r));
+      await wait(500);
+      out.storageMoved = await ws0.executeJavaScript(`({ keys: Object.keys(localStorage).sort(), sidebarW: localStorage.getItem('lookup.sidebarW'), sqllogKeptNewer: localStorage.getItem('lookup.sqllog.open'), cssWidth: getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w').trim() })`);
       const ws = webContents.getAllWebContents().find((w) => w.getURL().includes('index.html'));
       const id = await ws.executeJavaScript(`window.api.saveConnection({ name: 'HR Dev', host: 'h', service: 'FREEPDB1', user: 'hr', password: 'p', env: 'dev' })`);
       // Connection form: the eye button shows the saved password.

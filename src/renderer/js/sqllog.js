@@ -3,8 +3,8 @@
 (function () {
   const { h, icon, toast } = window.U;
   const store = {
-    get(k, d) { try { const v = localStorage.getItem('oradesk.sqllog.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
-    set(k, v) { try { localStorage.setItem('oradesk.sqllog.' + k, JSON.stringify(v)); } catch { /* ignore */ } },
+    get(k, d) { try { const v = localStorage.getItem('lookup.sqllog.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('lookup.sqllog.' + k, JSON.stringify(v)); } catch { /* ignore */ } },
   };
 
   const pad = (n, w = 2) => String(n).padStart(w, '0');

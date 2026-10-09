@@ -69,7 +69,8 @@ hardware acceleration is off by default) and **one shared renderer** for all vie
 - User queries run via `conn.rawExecute` (not in the SQL log); app-issued SQL goes through the logged
   `conn.execute`. Bind names must start with a letter (`__x` binds broke with NJS-098).
 - Connect strings are always full `(DESCRIPTION=…)` descriptors (EZConnect parsing broke, NJS-515).
-- Keep localStorage keys prefixed `oradesk.` (renaming them would lose users' saved query tabs).
+- localStorage keys use the `lookup.` prefix; `app/core.js` moves any old `oradesk.` keys over once.
+  The only intended "OraDesk" strings left are the data carry-over (`app-data.js`, that test, the core.js move).
 - Destructive actions on Production-tagged connections require typing the name / confirming.
 - After changing main-process code, the user must quit the app fully; the preload shows a
   "restart" message for "No handler registered" errors.

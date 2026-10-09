@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { app, BrowserWindow, webContents } = require('electron');
 
-app.setPath('userData', path.join(app.getPath('temp'), 'oradesk-smoke-dedupe'));
+app.setPath('userData', path.join(app.getPath('temp'), 'lookup-smoke-dedupe'));
 fs.rmSync(app.getPath('userData'), { recursive: true, force: true });
 require('../src/main/main.js');
 

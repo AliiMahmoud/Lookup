@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { app, webContents } = require('electron');
 const { menuItems, clickItem, isOpen } = require('./menu-helper');
-app.setPath('userData', path.join(app.getPath('temp'), 'oradesk-smoke-settings'));
+app.setPath('userData', path.join(app.getPath('temp'), 'lookup-smoke-settings'));
 fs.rmSync(app.getPath('userData'), { recursive: true, force: true });
 require('../src/main/main.js');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

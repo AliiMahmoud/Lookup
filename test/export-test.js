@@ -9,7 +9,7 @@ const { createWriter, sqlLiteral, exactNumber } = require('../src/main/export');
 let passed = 0;
 const t = (name, fn) => { fn(); passed++; console.log('  ok  ' + name); };
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oradesk-test-'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lookup-test-'));
 const cols = [{ name: 'ID', type: 'NUMBER' }, { name: 'NAME', type: 'VARCHAR2' }, { name: 'AT', type: 'DATE' }, { name: 'RAW1', type: 'RAW' }];
 const rows = [
   ['1', 'a,b "q"', '2026-01-02 03:04:05', { $bin: 'ABCD', len: 2 }],

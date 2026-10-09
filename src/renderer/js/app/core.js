@@ -2,6 +2,19 @@
 (function () {
   const Lookup = (window.Lookup = window.Lookup || {});
 
+  // Saved window state (query tabs, sidebar width, SQL log panel) used the app's old name as key
+  // prefix. Move it to "lookup." once, before anything reads it; old keys are then removed.
+  try {
+    const OLD_PREFIX = 'oradesk.'; // the app was called OraDesk before
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(OLD_PREFIX)) continue;
+      const next = 'lookup.' + key.slice(OLD_PREFIX.length);
+      if (localStorage.getItem(next) === null) localStorage.setItem(next, localStorage.getItem(key));
+      localStorage.removeItem(key);
+    }
+  } catch { /* storage unavailable: nothing to move */ }
+
   const ENVS = {
     none: { label: 'None', color: 'var(--env-none)' },
     local: { label: 'Local', color: 'var(--env-local)' },

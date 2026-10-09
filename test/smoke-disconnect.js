@@ -2,7 +2,7 @@
 const path = require('path');
 const fs = require('fs');
 const { app, webContents } = require('electron');
-app.setPath('userData', path.join(app.getPath('temp'), 'oradesk-smoke-disc'));
+app.setPath('userData', path.join(app.getPath('temp'), 'lookup-smoke-disc'));
 fs.rmSync(app.getPath('userData'), { recursive: true, force: true });
 require('../src/main/main.js');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -4,7 +4,7 @@ A fast desktop client for Oracle Database, in the spirit of TablePlus: connectio
 
 Built with **Electron** and **node-oracledb in Thin mode**, so it talks to Oracle directly in JavaScript — **no Oracle Instant Client to install**.
 
-Formerly called OraDesk. On first start Lookup copies saved connections (with their passwords), history, settings and query tabs from the OraDesk data folder, and a portable `OraDesk-data` folder is renamed to `Lookup-data`.
+Formerly called OraDesk. On first start Lookup copies saved connections (with their passwords), history, settings and query tabs from the OraDesk data folder, and a portable `OraDesk-data` folder is renamed to `Lookup-data`. Saved window state (query tabs, sidebar width, SQL log panel) is moved to Lookup's own keys on first start.
 
 ## Run it
 

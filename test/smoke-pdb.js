@@ -4,7 +4,7 @@ const fs = require('fs');
 const electron = require('electron');
 const { app, webContents } = electron;
 const { menuItems, clickItem } = require('./menu-helper');
-app.setPath('userData', path.join(app.getPath('temp'), 'oradesk-smoke-pdb'));
+app.setPath('userData', path.join(app.getPath('temp'), 'lookup-smoke-pdb'));
 fs.rmSync(app.getPath('userData'), { recursive: true, force: true });
 const db = require('../src/main/db');
 db.pdbs = async () => ({ current: 'CDB$ROOT', list: [
