@@ -63,25 +63,25 @@ Taken from the running app against the sample databases in [test/docker](test/do
 
 | Home: saved connections with their tags; the logo and main shortcuts on the right | New connection: pick the database first | The form for that database, with Test before you connect | Dark theme, and several databases open at once in the left rail |
 | --- | --- | --- | --- |
-| <a href="docs/screenshots/home.png"><img width="640" src="docs/screenshots/home.png" alt="Home: saved connections with their tags; the logo and main shortcuts on the right"></a> | <a href="docs/screenshots/choose-database.png"><img width="640" src="docs/screenshots/choose-database.png" alt="New connection: pick the database first"></a> | <a href="docs/screenshots/connection-form.png"><img width="640" src="docs/screenshots/connection-form.png" alt="The form for that database, with Test before you connect"></a> | <a href="docs/screenshots/postgres-query-dark.png"><img width="640" src="docs/screenshots/postgres-query-dark.png" alt="Dark theme, and several databases open at once in the left rail"></a> |
+| <img width="640" src="docs/screenshots/home.png" alt="Home: saved connections with their tags; the logo and main shortcuts on the right"> | <img width="640" src="docs/screenshots/choose-database.png" alt="New connection: pick the database first"> | <img width="640" src="docs/screenshots/connection-form.png" alt="The form for that database, with Test before you connect"> | <img width="640" src="docs/screenshots/postgres-query-dark.png" alt="Dark theme, and several databases open at once in the left rail"> |
 
 **SQL databases**
 
 | Table data: paging, filters, sorting, row count | Export to CSV, Excel, JSON or SQL INSERT, with the columns you pick | Structure: columns, constraints and indexes (editable on Oracle) | DDL with indexes, comments and triggers |
 | --- | --- | --- | --- |
-| <a href="docs/screenshots/postgres-table.png"><img width="640" src="docs/screenshots/postgres-table.png" alt="Table data: paging, filters, sorting, row count"></a> | <a href="docs/screenshots/export.png"><img width="640" src="docs/screenshots/export.png" alt="Export to CSV, Excel, JSON or SQL INSERT, with the columns you pick"></a> | <a href="docs/screenshots/oracle-structure.png"><img width="640" src="docs/screenshots/oracle-structure.png" alt="Structure: columns, constraints and indexes (editable on Oracle)"></a> | <a href="docs/screenshots/oracle-ddl.png"><img width="640" src="docs/screenshots/oracle-ddl.png" alt="DDL with indexes, comments and triggers"></a> |
+| <img width="640" src="docs/screenshots/postgres-table.png" alt="Table data: paging, filters, sorting, row count"> | <img width="640" src="docs/screenshots/export.png" alt="Export to CSV, Excel, JSON or SQL INSERT, with the columns you pick"> | <img width="640" src="docs/screenshots/oracle-structure.png" alt="Structure: columns, constraints and indexes (editable on Oracle)"> | <img width="640" src="docs/screenshots/oracle-ddl.png" alt="DDL with indexes, comments and triggers"> |
 
 **Redis**
 
 | Key browser and a hash key, with the selected value as JSON | Workbench: commands with formatted replies | Shell: prints replies as redis-cli does, with argument hints | Overview: commands per second, memory, clients, slow log |
 | --- | --- | --- | --- |
-| <a href="docs/screenshots/redis-hash.png"><img width="640" src="docs/screenshots/redis-hash.png" alt="Key browser and a hash key, with the selected value as JSON"></a> | <a href="docs/screenshots/redis-workbench.png"><img width="640" src="docs/screenshots/redis-workbench.png" alt="Workbench: commands with formatted replies"></a> | <a href="docs/screenshots/redis-shell.png"><img width="640" src="docs/screenshots/redis-shell.png" alt="Shell: prints replies as redis-cli does, with argument hints"></a> | <a href="docs/screenshots/redis-overview.png"><img width="640" src="docs/screenshots/redis-overview.png" alt="Overview: commands per second, memory, clients, slow log"></a> |
+| <img width="640" src="docs/screenshots/redis-hash.png" alt="Key browser and a hash key, with the selected value as JSON"> | <img width="640" src="docs/screenshots/redis-workbench.png" alt="Workbench: commands with formatted replies"> | <img width="640" src="docs/screenshots/redis-shell.png" alt="Shell: prints replies as redis-cli does, with argument hints"> | <img width="640" src="docs/screenshots/redis-overview.png" alt="Overview: commands per second, memory, clients, slow log"> |
 
 **MongoDB**
 
 | Documents: Filter / Project / Sort / Limit in mongosh syntax | Aggregations: stages with a live preview of each one | Schema: fields, types and value ranges from a sample | Shell: mongosh-style commands |
 | --- | --- | --- | --- |
-| <a href="docs/screenshots/mongodb-documents.png"><img width="640" src="docs/screenshots/mongodb-documents.png" alt="Documents: Filter / Project / Sort / Limit in mongosh syntax"></a> | <a href="docs/screenshots/mongodb-aggregation.png"><img width="640" src="docs/screenshots/mongodb-aggregation.png" alt="Aggregations: stages with a live preview of each one"></a> | <a href="docs/screenshots/mongodb-schema.png"><img width="640" src="docs/screenshots/mongodb-schema.png" alt="Schema: fields, types and value ranges from a sample"></a> | <a href="docs/screenshots/mongodb-shell.png"><img width="640" src="docs/screenshots/mongodb-shell.png" alt="Shell: mongosh-style commands"></a> |
+| <img width="640" src="docs/screenshots/mongodb-documents.png" alt="Documents: Filter / Project / Sort / Limit in mongosh syntax"> | <img width="640" src="docs/screenshots/mongodb-aggregation.png" alt="Aggregations: stages with a live preview of each one"> | <img width="640" src="docs/screenshots/mongodb-schema.png" alt="Schema: fields, types and value ranges from a sample"> | <img width="640" src="docs/screenshots/mongodb-shell.png" alt="Shell: mongosh-style commands"> |
 
 ## Installation
 
