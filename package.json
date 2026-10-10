@@ -10,7 +10,8 @@
     "test": "node test/run.js && node test/binds-test.js && node test/export-test.js && node test/alter-test.js && node test/lost-test.js && node test/pg-test.js && node test/mysql-test.js && node --no-warnings test/sqlite-test.js && node test/clickhouse-test.js && node test/redis-test.js && node test/redis-cluster-test.js && node test/mongodb-test.js",
     "dist:win": "electron-builder --win nsis --x64",
     "dist:portable": "electron-builder --win portable --x64",
-    "dist:zip": "electron-builder --win zip --x64"
+    "dist:zip": "electron-builder --win zip --x64",
+    "dist:mac": "electron-builder --mac dmg --x64 --arm64"
   },
   "dependencies": {
     "@clickhouse/client": "^1.24.1",

@@ -1,0 +1,60 @@
+name: Release
+
+# Pushing a tag like v1.0.0 builds the Windows and macOS installers and
+# attaches them to the GitHub release for that tag. Running it by hand
+# (Actions > Release > Run workflow) only builds, and keeps the files as
+# workflow artifacts.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+            args: --win nsis portable --x64
+          - os: macos-latest
+            name: macos
+            args: --mac dmg --x64 --arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        run: npx electron-builder ${{ matrix.args }} --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lookup-${{ matrix.name }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 ||
+            gh release create "$TAG" --title "Lookup ${TAG#v}" --generate-notes ||
+            gh release view "$TAG" >/dev/null
+          shopt -s nullglob
+          gh release upload "$TAG" dist/*.exe dist/*.dmg --clobber
