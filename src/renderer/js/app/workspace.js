@@ -72,6 +72,7 @@
       else if (!S.current) return;
       else if (action === 'newQuery') Lookup.openQueryTab();
       else if (action === 'newShell' && Lookup.openRedisShell) Lookup.openRedisShell();
+      else if (action === 'deleteKeys' && Lookup.redisDeletePattern) Lookup.redisDeletePattern();
       else if (action === 'overview') (Lookup.profile().workspace === 'mongodb' ? Lookup.openMongoOverview : Lookup.openRedisOverview)();
       else if (action === 'aggregation' && Lookup.openMongoAggregation) Lookup.openMongoAggregation();
       else if (action === 'openAnything') Lookup.openAnything();

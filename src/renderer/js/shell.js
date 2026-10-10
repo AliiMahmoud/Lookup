@@ -124,6 +124,7 @@
         : mongo ? btn('Shell: mongosh-style commands (Ctrl+T)', 'terminal', 'Shell', 'newQuery')
           : btn('New query (Ctrl+T)', 'code', 'Query', 'newQuery'),
       redis ? btn('Shell: redis-cli in a tab (Ctrl+Shift+T)', 'terminal', 'Shell', 'newShell') : null,
+      redis ? btn('Delete all keys matching a pattern (like cart:*)', 'trash', 'Delete keys', 'deleteKeys') : null,
       mongo ? btn('Aggregation pipeline for the open collection', 'playAll', 'Aggregation', 'aggregation') : null].filter(Boolean));
     if (redis || mongo) box.append(btn(mongo ? 'Overview: server, connections, operations, replica set' : 'Overview: server, memory, clients, slow log', 'gauge', null, 'overview'));
     box.append(

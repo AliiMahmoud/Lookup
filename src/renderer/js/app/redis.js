@@ -454,6 +454,25 @@
     else toast(stop ? `Stopped: ${fmtNum(deleted)} key${deleted === 1 ? '' : 's'} deleted` : `${fmtNum(deleted)} key${deleted === 1 ? '' : 's'} deleted`, stop ? 'info' : 'ok', 4000);
   }
 
+  /**
+   * Title bar "Delete keys": asks for a pattern (the sidebar filter when one is typed), then the same count →
+   * confirm → delete as a folder's delete. Plain text without * ? [ means keys starting with it.
+   */
+  async function deletePattern() {
+    const current = String(R.match || '').trim();
+    const start = current ? (/[*?[]/.test(current) ? current : current + '*') : '';
+    const typed = await Lookup.askText('Delete keys', 'Pattern of the keys to delete', start, {
+      ok: 'Find keys', hint: 'Like cart:* or session:2026-* — * matches anything, ? one character. Lookup counts the matching keys and asks before deleting.',
+    });
+    if (typed === null) return;
+    let pattern = typed.trim();
+    if (!pattern) return;
+    if (!/[*?[]/.test(pattern)) pattern += '*'; // "cart:" → cart:*
+    // Tabs to close afterwards: a plain prefix followed by *.
+    const literal = pattern.endsWith('*') && !/(^|[^\\])[*?[]/.test(pattern.slice(0, -1)) ? pattern.slice(0, -1).replace(/\\(.)/g, '$1') : null;
+    await deleteMatching(pattern, literal);
+  }
+
   async function deleteKey(k) {
     if (!(await confirmBox('Delete key', `Delete ${textOf(k.key)}? This can't be undone.`, 'Delete', true))) return false;
     try {
@@ -593,7 +612,7 @@
     isRedis, enterRedis, redisWhere, redisStatusItems, redisReconnected, R,
     redisText: textOf, redisKeyId: keyId, redisIsBinary: isBinary, fmtTtl, typeBadge, REDIS_TYPES: TYPES,
     redisKeyChanged: keyChanged, redisKeyGone: keyGone, redisKeyAdded: keyAdded,
-    redisRename: renameKey, redisDelete: deleteKey, redisDeleteMatching: deleteMatching, redisTtlDialog: ttlDialog, redisNewKey: newKeyDialog,
+    redisRename: renameKey, redisDelete: deleteKey, redisDeleteMatching: deleteMatching, redisDeletePattern: deletePattern, redisTtlDialog: ttlDialog, redisNewKey: newKeyDialog,
     redisPaintActive: paintTreeActive, redisLoadKeyspace: loadKeyspace, redisRefreshMemory: refreshMemory, redisScan: scan,
   });
 })();

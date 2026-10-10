@@ -200,7 +200,8 @@ it: `in-process-gpu`; hardware acceleration is off by default) and **one shared 
   and **Query** button left in the title bar, gear (settings) top-right.
 - Redis (agreed with mockups, plus a redis-cli Shell at Ali's request): badge **Rd** #d82c20; form Host, Port
   6379, Database, TLS, User, Password, Save password, Read-only (block write commands); title bar shows
-  **Workbench** (Ctrl+T) and **Shell** (Ctrl+Shift+T) instead of Query, and an Overview button on the right;
+  **Workbench** (Ctrl+T), **Shell** (Ctrl+Shift+T) and **Delete keys** (pattern → `redisDeletePattern`) instead of Query,
+  and an Overview button on the right;
   sidebar = key browser (db picker "dbN · N keys", filter searched in Redis until 300 matches or the whole
   keyspace — plain text any case via `[aA]` globs, patterns as typed; type chips, folders at ":", Scan more, Scan all / Stop); the Shell must
   print exactly like redis-cli (tested against it).

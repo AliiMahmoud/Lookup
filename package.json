@@ -1,11 +1,10 @@
 {
   "name": "lookup",
   "productName": "Lookup",
-  "version": "0.1.0",
-  "description": "A fast, native-feeling desktop client for Oracle Database",
+  "version": "1.0.0",
+  "description": "A fast, native-feeling desktop client for Databases / Redis",
   "main": "src/main/main.js",
   "author": "Ali",
-  "license": "MIT",
   "scripts": {
     "start": "electron .",
     "test": "node test/run.js && node test/binds-test.js && node test/export-test.js && node test/alter-test.js && node test/lost-test.js && node test/pg-test.js && node test/mysql-test.js && node --no-warnings test/sqlite-test.js && node test/clickhouse-test.js && node test/redis-test.js && node test/redis-cluster-test.js && node test/mongodb-test.js",
