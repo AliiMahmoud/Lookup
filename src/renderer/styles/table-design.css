@@ -32,6 +32,15 @@ td.type { color: var(--t-kw); }
   width: 260px; height: 28px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--border-strong);
   background: var(--raised); color: var(--text); outline: none; font-size: 12.5px; user-select: text;
 }
+.ct-engine, .ct-part {
+  height: 28px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--border-strong);
+  background: var(--raised); color: var(--text); outline: none; font-size: 12.5px; user-select: text;
+}
+.ct-engine { width: 260px; }
+.ct-part { flex: 1; min-width: 220px; }
+.ct-opts { padding-top: 0; }
+.ct-head:has(+ .ct-opts) { border-bottom: 0; }
+.ct-engine:focus, .ct-part:focus,
 .ct-name:focus, .ct-pk:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .ct-schema { font-size: 12px; }
 .ct-pk {

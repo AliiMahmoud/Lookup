@@ -174,7 +174,7 @@
         body: h('div', { class: 'se-form' },
           h('p', { class: 'danger-note' }, text),
           h('p', { class: 'mono strong' }, `${owner}.${name}`),
-          S.txPending && !S.autoCommit ? h('p', { class: 'muted' }, 'This also commits your open transaction (Oracle commits before and after DDL).') : null,
+          S.txPending && !S.autoCommit ? h('p', { class: 'muted' }, (Lookup.profile().design || {}).commitsOpenTx ? Lookup.profile().design.openTxNote : 'This also commits your open transaction (Oracle commits before and after DDL).') : null,
           ...checks,
           prod ? h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Production connection: type the table name to confirm'), typed) : null),
         actions: [
@@ -186,10 +186,19 @@
       setTimeout(sync, 0);
     });
   }
+  // What this engine's truncate / drop do and offer (profile.design); Oracle's when the engine says nothing.
+  const tableDesign = () => ({
+    truncateNote: 'Removes every row from the table immediately. This cannot be rolled back.',
+    dropOptions: [
+      { key: 'cascade', label: 'Also drop foreign keys in other tables that reference it (CASCADE CONSTRAINTS)' },
+      { key: 'purge', label: 'Skip the recycle bin (PURGE) — cannot be restored with FLASHBACK' },
+    ],
+    ...(Lookup.profile().design || {}),
+  });
   async function truncateTableUI(owner, name) {
     const ok = await confirmDestructive({
       title: 'Truncate table', okLabel: 'Truncate', owner, name,
-      text: 'Removes every row from the table immediately. This cannot be rolled back.',
+      text: tableDesign().truncateNote,
     });
     if (!ok) return;
     try {
@@ -207,10 +216,7 @@
     const opts = await confirmDestructive({
       title: 'Delete table', okLabel: 'Delete table', owner, name,
       text: 'Drops the table with all its data, indexes, constraints and triggers.',
-      extra: [
-        { key: 'cascade', label: 'Also drop foreign keys in other tables that reference it (CASCADE CONSTRAINTS)' },
-        { key: 'purge', label: 'Skip the recycle bin (PURGE) — cannot be restored with FLASHBACK' },
-      ],
+      extra: tableDesign().dropOptions,
     });
     if (!opts) return;
     try {

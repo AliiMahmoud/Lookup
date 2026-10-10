@@ -85,6 +85,7 @@ async function structure(s, schema, name) {
   return {
     columns: cols.map((c) => ({ ...c, pk: c.pkFlag })),
     constraints, indexes, comment: [comment, engine ? `Engine: ${engine}` : ''].filter(Boolean).join(' — ') || null,
+    tableComment: comment || '', // the comment alone, for the Structure editor
   };
 }
 

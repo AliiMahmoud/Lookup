@@ -223,6 +223,75 @@ INSERT INTO audit_log (message) VALUES ('first'), ('second');
     await db.commit(W);
   });
 
+  await t('table design: create, direct changes, rebuild keeping rows / indexes / triggers / keys, refusals, truncate, drop', async () => {
+    const planOf = async (table) => {
+      const st = await db.structure(W, 'main', table);
+      return {
+        owner: 'main', table,
+        columns: st.columns.map((c) => ({ orig: { name: c.name, type: c.fullType, nullable: c.nullable, default: c.default, comment: '', identity: c.identity }, name: c.name, type: c.fullType, nullable: c.nullable, default: c.identity ? '' : (c.default || ''), comment: '', drop: false })),
+        dropConstraints: [], addConstraints: [], dropIndexes: [], addIndexes: [], tableComment: { from: '', to: '' }, st,
+      };
+    };
+    const spec = { owner: 'main', name: 'design_me', columns: [{ name: 'id', type: 'INTEGER' }, { name: 'code', type: 'TEXT', nullable: false }, { name: 'qty', type: 'INTEGER', default: '0' }, { name: 'customer_id', type: 'INTEGER' }], primaryKey: ['id'] };
+    assert.strictEqual(await db.createTableSql(W, spec), 'CREATE TABLE "main"."design_me" (\n  "id" INTEGER PRIMARY KEY,\n  "code" TEXT NOT NULL,\n  "qty" INTEGER DEFAULT 0,\n  "customer_id" INTEGER\n)');
+    await db.createTable(W, spec);
+    await db.run(W, ["INSERT INTO design_me (code, qty, customer_id) VALUES ('A', 1, 1), ('B', 2, 2)", 'CREATE INDEX design_code ON design_me (code)', "CREATE TRIGGER design_trg AFTER UPDATE ON design_me BEGIN UPDATE design_me SET qty = qty WHERE 0; END"]);
+    await db.commit(W);
+    // Direct: rename, add column, new index (no rebuild).
+    let plan = await planOf('design_me');
+    plan.columns.find((c) => c.name === 'qty').name = 'quantity';
+    plan.columns.push({ orig: null, name: 'note', type: 'TEXT', nullable: true, default: "'n/a'", comment: '', drop: false });
+    plan.addIndexes = [{ name: '', unique: false, columns: ['quantity'] }];
+    assert.deepStrictEqual((await db.alterTableSql(W, plan)).map((x) => x.sql), [
+      'ALTER TABLE "main"."design_me" RENAME COLUMN "qty" TO "quantity"',
+      'ALTER TABLE "main"."design_me" ADD COLUMN "note" TEXT DEFAULT \'n/a\'',
+      'CREATE INDEX "main"."design_me_quantity_idx" ON "design_me" ("quantity")',
+    ]);
+    assert.strictEqual((await db.alterTable(W, plan)).ok, true);
+    // Rebuild: type, NOT NULL and default changed, a check and a foreign key added; rows, index, trigger kept.
+    plan = await planOf('design_me');
+    Object.assign(plan.columns.find((c) => c.name === 'quantity'), { type: 'REAL', nullable: false, default: '1' });
+    plan.addConstraints = [{ kind: 'CHECK', name: 'qty_positive', check: 'quantity >= 0' }, { kind: 'FOREIGN KEY', name: '', columns: ['customer_id'], refTable: 'customers', refColumns: ['id'], onDelete: 'SET NULL' }];
+    const steps = await db.alterTableSql(W, plan);
+    assert.deepStrictEqual(steps.map((x) => x.label), ['Rebuild design_me']);
+    assert.match(steps[0].sql, /"quantity" REAL NOT NULL DEFAULT 1,[\s\S]*FOREIGN KEY \("customer_id"\) REFERENCES "customers" \("id"\) ON DELETE SET NULL,\n  CONSTRAINT "qty_positive" CHECK \(quantity >= 0\)/);
+    let r = await db.alterTable(W, plan);
+    assert.strictEqual(r.ok, true, r.error);
+    let res = await db.run(W, ['select id, code, quantity, note from design_me order by id', "select type, name from sqlite_master where tbl_name = 'design_me' order by name"]);
+    assert.deepStrictEqual(res[0].rows, [['1', 'A', '1', 'n/a'], ['2', 'B', '2', 'n/a']]);
+    assert.deepStrictEqual(res[1].rows, [['index', 'design_code'], ['table', 'design_me'], ['index', 'design_me_quantity_idx'], ['trigger', 'design_trg']]);
+    const st = await db.structure(W, 'main', 'design_me');
+    assert.deepStrictEqual(st.constraints.map((c) => c.type).sort(), ['CHECK', 'FOREIGN KEY', 'PRIMARY KEY']);
+    assert.strictEqual(st.columns.find((c) => c.name === 'id').identity, 'ROWID'); // still the rowid
+    // A rebuild that fails leaves everything as it was.
+    plan = await planOf('design_me');
+    plan.addConstraints = [{ kind: 'CHECK', name: 'never', check: 'quantity < 0' }];
+    r = await db.alterTable(W, plan);
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.rolledBack, true);
+    assert.match(r.error, /CHECK constraint failed/);
+    assert.strictEqual((await db.run(W, ['select count(*) from design_me']))[0].rows[0][0], '2');
+    assert.strictEqual((await db.structure(W, 'main', 'design_me')).constraints.length, 3);
+    // Refusals with a reason: a dropped column still used by an index; COLLATE can't survive a rebuild; no comments.
+    plan = await planOf('design_me');
+    plan.columns.find((c) => c.name === 'code').drop = true;
+    plan.addConstraints = [{ kind: 'UNIQUE', name: '', columns: ['note'] }];
+    await assert.rejects(db.alterTableSql(W, plan), /Index design_code uses a column being dropped/);
+    await db.run(W, ['CREATE TABLE collated (id INTEGER PRIMARY KEY, name TEXT COLLATE NOCASE)']);
+    await db.commit(W);
+    plan = await planOf('collated');
+    plan.columns.find((c) => c.name === 'name').nullable = false;
+    await assert.rejects(db.alterTableSql(W, plan), /uses COLLATE/);
+    plan = await planOf('design_me');
+    plan.tableComment.to = 'x';
+    await assert.rejects(db.alterTableSql(W, plan), /no comments/);
+    await db.truncateTable(W, 'main', 'design_me');
+    assert.strictEqual((await db.run(W, ['select count(*) from design_me']))[0].rows[0][0], '0');
+    await db.dropTable(W, 'main', 'design_me');
+    await db.dropTable(W, 'main', 'collated');
+    assert.ok(!(await db.objects(W, 'main')).some((o) => /design|collated/.test(o.name)));
+  });
+
   await t('Stop ends a long query at once; the open transaction is rolled back; the file stays usable', async () => {
     await db.run(W, ["update customers set city = 'Siwa' where id = 3"]);
     const running = db.run(W, ['WITH RECURSIVE g(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM g LIMIT 50000000) SELECT count(*) FROM g']);

@@ -237,6 +237,70 @@ const t = async (name, fn) => { await fn(); passed++; console.log('  ok ', name)
     await admin.query('DROP TABLE lookup_test.edit_me, lookup_test.edit_two');
   });
 
+  await t('table design: create, alter step by step (each statement commits), defaults kept, truncate, drop', async () => {
+    const planOf = async (table) => {
+      const st = await db.structure(W, S, table);
+      return {
+        owner: S, table,
+        columns: st.columns.map((c) => ({ orig: { name: c.name, type: c.fullType, nullable: c.nullable, default: c.default, comment: c.comments || '', identity: c.identity }, name: c.name, type: c.fullType, nullable: c.nullable, default: c.identity ? '' : (c.default || ''), comment: c.comments || '', drop: false })),
+        dropConstraints: [], addConstraints: [], dropIndexes: [], addIndexes: [], tableComment: { from: st.comment || '', to: st.comment || '' }, st,
+      };
+    };
+    const spec = { owner: S, name: 'design_me', columns: [{ name: 'id', type: 'INT AUTO_INCREMENT' }, { name: 'code', type: 'VARCHAR(10)', nullable: false }, { name: 'city', type: 'VARCHAR(20)', default: "'Cairo'" }, { name: 'qty', type: 'INT', default: '0' }], primaryKey: ['id'] };
+    assert.strictEqual(await db.createTableSql(W, spec), "CREATE TABLE `lookup_test`.`design_me` (\n  `id` INT AUTO_INCREMENT NOT NULL PRIMARY KEY,\n  `code` VARCHAR(10) NOT NULL,\n  `city` VARCHAR(20) NULL DEFAULT 'Cairo',\n  `qty` INT NULL DEFAULT 0\n)");
+    await db.createTable(W, spec);
+    await admin.query("INSERT INTO lookup_test.design_me (code, qty) VALUES ('A', 1), ('B', 2)");
+    let plan = await planOf('design_me');
+    const col = (n) => plan.columns.find((c) => c.name === n);
+    assert.strictEqual(col('city').default, "'Cairo'"); // written as SQL on MySQL 8 and MariaDB alike
+    col('city').comment = 'Where'; // only the comment: the default must survive the restated column
+    Object.assign(col('qty'), { name: 'quantity', type: 'BIGINT', default: '5' });
+    plan.columns.push({ orig: null, name: 'note', type: 'TEXT', nullable: true, default: '', comment: '', drop: false });
+    plan.addConstraints = [{ kind: 'UNIQUE', name: '', columns: ['code'] }, { kind: 'CHECK', name: 'qty_positive', check: 'quantity >= 0' }, { kind: 'FOREIGN KEY', name: '', columns: ['id'], refTable: 'customers', refColumns: ['id'], onDelete: '' }];
+    plan.addIndexes = [{ name: '', unique: false, columns: ['quantity'] }];
+    plan.tableComment.to = 'Made by the test';
+    const steps = await db.alterTableSql(W, plan);
+    assert.deepStrictEqual(steps.map((x) => x.sql), [
+      "ALTER TABLE `lookup_test`.`design_me` CHANGE COLUMN `city` `city` varchar(20) NULL DEFAULT 'Cairo' COMMENT 'Where'",
+      "ALTER TABLE `lookup_test`.`design_me` CHANGE COLUMN `qty` `quantity` BIGINT NULL DEFAULT 5",
+      'ALTER TABLE `lookup_test`.`design_me` ADD COLUMN `note` TEXT NULL',
+      'ALTER TABLE `lookup_test`.`design_me` ADD CONSTRAINT `design_me_code_uk` UNIQUE (`code`)',
+      'ALTER TABLE `lookup_test`.`design_me` ADD CONSTRAINT `qty_positive` CHECK (quantity >= 0)',
+      'ALTER TABLE `lookup_test`.`design_me` ADD CONSTRAINT `design_me_id_fk` FOREIGN KEY (`id`) REFERENCES `lookup_test`.`customers` (`id`)',
+      'CREATE INDEX `design_me_quantity_idx` ON `lookup_test`.`design_me` (`quantity`)',
+      "ALTER TABLE `lookup_test`.`design_me` COMMENT = 'Made by the test'",
+    ]);
+    let r = await db.alterTable(W, plan);
+    assert.strictEqual(r.ok, true, r.error);
+    let st = await db.structure(W, S, 'design_me');
+    const c2 = Object.fromEntries(st.columns.map((c) => [c.name, c]));
+    assert.deepStrictEqual([c2.city.default, c2.city.comments, c2.quantity.fullType.replace('(20)', ''), c2.quantity.default, c2.id.identity], ["'Cairo'", 'Where', 'bigint', '5', 'AUTO_INCREMENT']);
+    assert.deepStrictEqual(st.constraints.map((c) => c.type).sort(), ['CHECK', 'FOREIGN KEY', 'PRIMARY KEY', 'UNIQUE']);
+    assert.strictEqual(st.comment, 'Made by the test');
+    // A failing step stops the run; what ran before it stays (MySQL commits each DDL).
+    plan = await planOf('design_me');
+    plan.columns.push({ orig: null, name: 'added_first', type: 'INT', nullable: true, default: '', comment: '', drop: false });
+    plan.addConstraints = [{ kind: 'CHECK', name: 'never', check: 'quantity < 0' }];
+    r = await db.alterTable(W, plan);
+    assert.strictEqual(r.ok, false);
+    assert.deepStrictEqual(r.done.map((x) => x.label), ['Add column added_first']);
+    assert.match(r.failed.sql, /never/);
+    // Drop constraints of each kind, an index and a column.
+    plan = await planOf('design_me');
+    const named = (type) => plan.st.constraints.find((c) => c.type === type).name;
+    plan.dropConstraints = [named('FOREIGN KEY'), named('UNIQUE'), 'qty_positive'];
+    plan.dropIndexes = ['design_me_quantity_idx'];
+    plan.columns.find((c) => c.name === 'note').drop = true;
+    r = await db.alterTable(W, plan);
+    assert.strictEqual(r.ok, true, r.error);
+    st = await db.structure(W, S, 'design_me');
+    assert.deepStrictEqual([st.constraints.map((c) => c.type), st.indexes.map((i) => i.name).includes('design_me_quantity_idx'), st.columns.some((c) => c.name === 'note')], [['PRIMARY KEY'], false, false]);
+    await db.truncateTable(W, S, 'design_me');
+    assert.strictEqual((await admin.query('SELECT count(*) n FROM lookup_test.design_me'))[0][0].n, 0);
+    await db.dropTable(W, S, 'design_me', {});
+    assert.strictEqual((await admin.query("SELECT count(*) n FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'lookup_test' AND TABLE_NAME = 'design_me'"))[0][0].n, 0);
+  });
+
   await t('Stop kills the running query and the session stays usable', async () => {
     const running = db.run(W, ['select sleep(30)']);
     await new Promise((r) => setTimeout(r, 300));

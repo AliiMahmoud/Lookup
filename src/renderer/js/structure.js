@@ -15,13 +15,16 @@
 
   /**
    * opts = { owner, table, data (from api.structure), tables: [names for FK], loadRef(owner, table) -> structure,
-   *          onChange(count), onApply(plan) }
+   *          onChange(count), onApply(plan), design (profile.design: comments, toggleConstraints, upperCaseNames, …) }
    */
   function structureEditor(opts) {
-    if (window.ctEnsureLists) window.ctEnsureLists();
+    const D = { comments: true, toggleConstraints: true, upperCaseNames: true, identityHint: 'Identity column: Oracle fills it from a sequence', checkExample: "e.g. QTY > 0 or STATUS IN ('A','S')", ...(opts.design || {}) };
+    const lists = window.ctEnsureLists ? window.ctEnsureLists(opts.design) : { types: 'ct-types', defaults: 'ct-defaults' };
+    const identityText = (x) => (D.upperCaseNames ? `IDENTITY · ${String(x).toLowerCase()}`
+      : x === 'AUTO_INCREMENT' ? 'auto_increment' : x === 'ROWID' ? 'rowid' : x === 'AUTOINCREMENT' ? 'rowid · autoincrement' : `identity · ${String(x).toLowerCase()}`);
     let key = 0;
     const st = {
-      comment: { from: opts.data.comment || '', to: opts.data.comment || '' },
+      comment: (() => { const t = opts.data.tableComment !== undefined ? opts.data.tableComment : opts.data.comment; return { from: t || '', to: t || '' }; })(),
       cols: opts.data.columns.map((c) => {
         const orig = { name: c.name, type: c.fullType, nullable: !!c.nullable, default: c.default, comment: c.comments || '', identity: c.identity };
         return { key: ++key, orig, name: orig.name, type: orig.type, nullable: orig.nullable, default: orig.identity ? '' : (orig.default || ''), comment: orig.comment, drop: false, pk: c.pk };
@@ -70,6 +73,16 @@
 
     const liveColumnNames = () => st.cols.filter((c) => !c.drop && c.name.trim()).map((c) => c.name.trim());
 
+    // ClickHouse writes Nullable in the type: the Nullable switch rewrites the type text and the type text sets the switch.
+    const unwrapT = (t) => {
+      let m = /^Nullable\((.*)\)$/is.exec(t.trim());
+      if (m) return m[1].trim();
+      m = /^LowCardinality\(\s*Nullable\((.*)\)\s*\)$/is.exec(t.trim());
+      return m ? `LowCardinality(${m[1].trim()})` : t.trim();
+    };
+    const wrapT = (t) => { const b = unwrapT(t); const lc = /^LowCardinality\((.*)\)$/is.exec(b); return !b ? b : lc ? `LowCardinality(Nullable(${lc[1].trim()}))` : `Nullable(${b})`; };
+    const typeSaysNull = (t) => /^(Nullable\(|LowCardinality\(\s*Nullable\()/i.test(String(t || '').trim());
+
     // ---------- columns ----------
     function colInput(c, field, attrs = {}) {
       const input = h('input', { class: 'se-in mono', spellcheck: 'false', autocomplete: 'off', disabled: c.drop, ...attrs });
@@ -85,25 +98,30 @@
 
     function columnsSection() {
       const rows = st.cols.map((c, i) => {
-        const nul = h('select', { class: 'se-in', disabled: c.drop || c.pk && !c.drop, title: c.pk ? 'Primary key columns are NOT NULL' : '' },
+        const nul = h('select', { class: 'se-in', disabled: c.drop || c.pk && !c.drop, title: c.pk ? (D.keyNullNote || 'Primary key columns are NOT NULL') : '' },
           h('option', { value: 'YES' }, 'YES'), h('option', { value: 'NO' }, 'NO'));
         nul.value = c.nullable ? 'YES' : 'NO';
         nul.addEventListener('change', () => {
           c.nullable = nul.value === 'YES';
+          if (D.nullableInType && c.type.trim()) { c.type = c.nullable ? wrapT(c.type) : unwrapT(c.type); render(); return; }
           nul.closest('td').classList.toggle('chg', !!c.orig && colChanged(c, 'nullable'));
           changed();
         });
         const idTag = c.orig && c.orig.identity
-          ? h('span', { class: 'se-identity', title: 'Identity column: Oracle fills it from a sequence' }, `IDENTITY · ${String(c.orig.identity).toLowerCase()}`)
+          ? h('span', { class: 'se-identity', title: D.identityHint }, identityText(c.orig.identity))
           : null;
         const cell = (field, content) => h('td', { class: c.orig && !c.drop && colChanged(c, field) ? 'chg' : '' }, content);
         return h('tr', { class: 'se-row' + (c.drop ? ' dropped' : '') + (!c.orig ? ' added' : '') + (!c.orig && (!!c.name.trim() !== !!c.type.trim()) ? ' incomplete' : '') },
           h('td', { class: 'muted se-num' }, c.orig ? i + 1 : '+'),
           cell('name', h('div', { class: 'se-name' }, c.pk ? icon('key', 'pk') : null, colInput(c, 'name', { placeholder: 'column_name' }))),
-          cell('type', c.orig && c.orig.identity ? h('span', { class: 'se-fixed mono type' }, c.orig.type) : colInput(c, 'type', { list: 'ct-types', placeholder: 'data type' })),
+          cell('type', c.orig && c.orig.identity ? h('span', { class: 'se-fixed mono type' }, c.orig.type) : (() => {
+            const t = colInput(c, 'type', { list: lists.types, placeholder: 'data type' });
+            if (D.nullableInType) t.addEventListener('input', () => { c.nullable = typeSaysNull(c.type); nul.value = c.nullable ? 'YES' : 'NO'; nul.closest('td').classList.toggle('chg', !!c.orig && colChanged(c, 'nullable')); });
+            return t;
+          })()),
           cell('nullable', nul),
-          cell('default', idTag || colInput(c, 'default', { list: 'ct-defaults', placeholder: 'NULL' })),
-          cell('comment', colInput(c, 'comment', { placeholder: '' })),
+          cell('default', idTag || colInput(c, 'default', { list: lists.defaults, placeholder: 'NULL' })),
+          D.comments ? cell('comment', colInput(c, 'comment', { placeholder: '' })) : null,
           h('td', { class: 'se-act' },
             c.drop
               ? h('button', { class: 'icon-btn', title: 'Keep this column', onclick: () => { c.drop = false; render(); } }, icon('undo'))
@@ -114,7 +132,7 @@
       });
       const addBtn = h('button', {
         class: 'btn sm ghost', onclick: () => {
-          st.cols.push({ key: ++key, orig: null, name: '', type: '', nullable: true, default: '', comment: '', drop: false });
+          st.cols.push({ key: ++key, orig: null, name: '', type: '', nullable: D.newColumnsNullable !== false, default: '', comment: '', drop: false });
           render();
           const added = el.querySelectorAll('.se-cols tr.added');
           if (added.length) added[added.length - 1].querySelector('.se-in').focus();
@@ -123,8 +141,8 @@
       return [
         h('div', { class: 'se-h' }, h('h3', null, 'Columns', h('span', { class: 'count' }, st.cols.filter((c) => !c.drop).length)), addBtn),
         h('table', { class: 'meta se-cols' },
-          h('colgroup', null, ['34px', '22%', '22%', '90px', '22%', 'auto', '40px'].map((w) => h('col', { style: { width: w } }))),
-          h('thead', null, h('tr', null, ['#', 'Name', 'Type', 'Nullable', 'Default', 'Comment', ''].map((x) => h('th', null, x)))),
+          h('colgroup', null, (D.comments ? ['34px', '22%', '22%', '90px', '22%', 'auto', '40px'] : ['34px', '28%', '28%', '90px', 'auto', '40px']).map((w) => h('col', { style: { width: w } }))),
+          h('thead', null, h('tr', null, (D.comments ? ['#', 'Name', 'Type', 'Nullable', 'Default', 'Comment', ''] : ['#', 'Name', 'Type', 'Nullable', 'Default', '']).map((x) => h('th', null, x)))),
           h('tbody', null, rows)),
       ];
     }
@@ -134,7 +152,7 @@
       const rows = st.cons.map((c) => h('tr', { class: 'se-row' + (c.drop ? ' dropped' : '') },
         h('td', { class: 'mono strong' }, c.name), h('td', null, c.type), h('td', { class: 'mono' }, c.columns || ''),
         h('td', { class: 'mono muted se-detail' }, c.detail || ''),
-        h('td', { class: c.enable !== (c.status === 'ENABLED') ? 'chg' : '' }, (() => {
+        h('td', { class: c.enable !== (c.status === 'ENABLED') ? 'chg' : '' }, !D.toggleConstraints ? h('span', { class: 'muted' }, String(c.status || '').toLowerCase()) : (() => {
           const sel = h('select', { class: 'se-in', disabled: c.drop }, h('option', { value: '1' }, 'enabled'), h('option', { value: '0' }, 'disabled'));
           sel.value = c.enable ? '1' : '0';
           sel.addEventListener('change', () => { c.enable = sel.value === '1'; render(); });
@@ -142,7 +160,9 @@
         })()),
         h('td', { class: 'se-act' }, c.drop
           ? h('button', { class: 'icon-btn', title: 'Keep', onclick: () => { c.drop = false; render(); } }, icon('undo'))
-          : h('button', { class: 'icon-btn', title: 'Drop constraint', onclick: () => { c.drop = true; render(); } }, icon('trash')))));
+          : (D.fixedConstraints || []).includes(c.type)
+            ? h('button', { class: 'icon-btn', disabled: true, title: D.fixedConstraintNote || '' }, icon('trash'))
+            : h('button', { class: 'icon-btn', title: 'Drop constraint', onclick: () => { c.drop = true; render(); } }, icon('trash')))));
       st.addCons.forEach((c, i) => rows.push(h('tr', { class: 'se-row added' },
         h('td', { class: 'mono strong' }, c.name || h('span', { class: 'muted' }, 'auto')), h('td', null, c.kind),
         h('td', { class: 'mono' }, (c.columns || []).join(', ')),
@@ -178,21 +198,23 @@
 
     function constraintDialog() {
       const hasPk = st.cons.some((c) => c.type === 'PRIMARY KEY' && !c.drop) || st.addCons.some((c) => c.kind === 'PRIMARY KEY');
-      const f = { kind: hasPk ? 'UNIQUE' : 'PRIMARY KEY', name: '', check: '', refTable: '', refColumns: [], onDelete: '' };
+      const kinds = D.constraintKinds ? KINDS.filter(([v]) => D.constraintKinds.includes(v)) : KINDS;
+      const first = kinds.find(([v]) => !(v === 'PRIMARY KEY' && hasPk));
+      const f = { kind: first ? first[0] : 'CHECK', name: '', check: '', refTable: '', refColumns: [], onDelete: '' };
       const body = h('div', { class: 'se-form' });
       const cols = pickColumns();
       let refPick = null;
       const paint = () => {
         body.innerHTML = '';
         const kind = h('select', { class: 'input', onchange: (e) => { f.kind = e.target.value; paint(); } },
-          KINDS.map(([v, l]) => h('option', { value: v, disabled: v === 'PRIMARY KEY' && hasPk }, l + (v === 'PRIMARY KEY' && hasPk ? ' (table has one)' : ''))));
+          kinds.map(([v, l]) => h('option', { value: v, disabled: v === 'PRIMARY KEY' && hasPk }, l + (v === 'PRIMARY KEY' && hasPk ? ' (table has one)' : ''))));
         kind.value = f.kind;
         const name = h('input', { class: 'input mono', placeholder: 'leave empty for an automatic name', oninput: (e) => { f.name = e.target.value; } });
         name.value = f.name;
         body.append(h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Type'), kind),
           h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Name'), name));
         if (f.kind === 'CHECK') {
-          const cond = h('input', { class: 'input mono', placeholder: "e.g. QTY > 0 or STATUS IN ('A','S')", oninput: (e) => { f.check = e.target.value; } });
+          const cond = h('input', { class: 'input mono', placeholder: D.checkExample, oninput: (e) => { f.check = e.target.value; } });
           cond.value = f.check;
           body.append(h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Condition'), cond));
           return;
@@ -201,7 +223,7 @@
         if (f.kind === 'FOREIGN KEY') {
           const listId = 'se-tables-' + key;
           const refBox = h('div', { class: 'se-pick' }, h('span', { class: 'muted' }, 'Pick a table to list its columns'));
-          const ref = h('input', { class: 'input mono', list: listId, placeholder: 'TABLE or OWNER.TABLE' });
+          const ref = h('input', { class: 'input mono', list: listId, placeholder: D.upperCaseNames ? 'TABLE or OWNER.TABLE' : 'table or schema.table' });
           ref.value = f.refTable;
           const loadRef = async () => {
             f.refTable = ref.value.trim();
@@ -210,7 +232,7 @@
             refBox.innerHTML = '';
             refBox.append(h('span', { class: 'muted' }, 'Loading…'));
             try {
-              const s = await opts.loadRef(o.toUpperCase(), t.toUpperCase());
+              const s = await opts.loadRef(D.upperCaseNames ? o.toUpperCase() : o, D.upperCaseNames ? t.toUpperCase() : t);
               const pk = s.constraints.find((c) => c.type === 'PRIMARY KEY');
               const pkCols = pk ? pk.columns.split(', ') : [];
               const order = [...pkCols];
@@ -287,7 +309,7 @@
           }, icon('trash')))));
       st.addIdx.forEach((i, n) => rows.push(h('tr', { class: 'se-row added' },
         h('td', { class: 'mono strong' }, i.name || h('span', { class: 'muted' }, 'auto')), h('td', { class: 'mono' }, i.columns.join(', ')),
-        h('td', { class: 'muted' }, 'normal'), h('td', null, i.unique ? 'yes' : h('span', { class: 'muted' }, 'no')), h('td', { class: 'muted' }, 'new'),
+        h('td', { class: 'muted' }, i.type ? `${i.type} · granularity ${i.granularity}` : 'normal'), h('td', null, i.unique ? 'yes' : h('span', { class: 'muted' }, 'no')), h('td', { class: 'muted' }, 'new'),
         h('td', { class: 'se-act' }, h('button', { class: 'icon-btn', title: 'Remove', onclick: () => { st.addIdx.splice(n, 1); render(); } }, icon('trash'))))));
       return [
         h('div', { class: 'se-h' }, h('h3', null, 'Indexes', h('span', { class: 'count' }, st.idx.filter((i) => !i.drop).length + st.addIdx.length)),
@@ -302,12 +324,20 @@
       const cols = pickColumns();
       const name = h('input', { class: 'input mono', placeholder: 'leave empty for an automatic name' });
       const uniq = h('input', { type: 'checkbox' });
+      // ClickHouse: data-skipping indexes have a type and a granularity instead of Unique.
+      const typeList = 'se-itypes-' + key;
+      const itype = D.indexTypes ? h('input', { class: 'input mono', list: typeList, spellcheck: 'false' }) : null;
+      const gran = D.indexTypes ? h('input', { class: 'input mono', type: 'number', min: '1', value: '1' }) : null;
+      if (itype) itype.value = D.indexTypes[0];
       modal({
         title: 'Add index',
         body: h('div', { class: 'se-form' },
           h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Name'), name),
           h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Columns (in order clicked)'), cols.el),
-          h('label', { class: 'check' }, uniq, h('span', null, 'Unique'))),
+          itype ? [
+            h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Index type'), itype, h('datalist', { id: typeList }, D.indexTypes.map((x) => h('option', { value: x })))),
+            h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Granularity (blocks of rows per index entry)'), gran),
+          ] : h('label', { class: 'check' }, uniq, h('span', null, 'Unique'))),
         actions: [
           { label: 'Cancel' },
           {
@@ -315,7 +345,9 @@
             onClick: () => {
               const c = cols.value();
               if (!c.length) { toast('Pick at least one column', 'err'); return false; }
-              st.addIdx.push({ name: name.value.trim(), unique: uniq.checked, columns: c });
+              st.addIdx.push(itype
+                ? { name: name.value.trim(), unique: false, columns: c, type: itype.value.trim() || D.indexTypes[0], granularity: Number(gran.value) || 1 }
+                : { name: name.value.trim(), unique: uniq.checked, columns: c });
               render();
               return true;
             },
@@ -328,7 +360,7 @@
     function render() {
       const scroll = el.parentNode ? el.parentNode.scrollTop : 0;
       el.innerHTML = '';
-      const comment = h('input', { class: 'se-comment', placeholder: 'Table comment', spellcheck: 'false' });
+      const comment = h('input', { class: 'se-comment' + (D.comments ? '' : ' hidden'), placeholder: 'Table comment', spellcheck: 'false' });
       comment.value = st.comment.to;
       comment.classList.toggle('chg', st.comment.to !== st.comment.from);
       comment.addEventListener('input', () => { st.comment.to = comment.value; comment.classList.toggle('chg', st.comment.to !== st.comment.from); changed(); });

@@ -4,6 +4,7 @@ const { open, targetKey, cfgForDatabase } = require('./connect');
 const { schemas, objects, columns, structure, databases } = require('./metadata');
 const { ddl, ddlOn } = require('./ddl');
 const { tableData, previewChanges, applyChanges } = require('./table-data');
+const { createTableSql, createTable, alterTableSql, alterTable, truncateTable, dropTable } = require('./table-admin');
 const { runStatement, readOutput, inTransaction } = require('./query');
 const { tableExportQuery, streamQuery, cancelOn } = require('./export');
 
@@ -37,8 +38,9 @@ module.exports = {
   isLostError, isCancelError, cancel,
   // browsing
   schemas, objects, columns, structure, databases, ddl, ddlFor: ddlOn,
-  // table data (read-only for now)
+  // table data (grid edits by primary key) and table design
   tableData, previewChanges, applyChanges,
+  createTableSql, createTable, alterTableSql, alterTable, truncateTable, dropTable,
   // query tabs
   runStatement, readOutput, inTransaction,
   // exports

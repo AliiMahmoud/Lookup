@@ -25,6 +25,28 @@ async function objects(s, schema) {
   return r.rows.map(([name, type]) => ({ name, type, invalid: false }));
 }
 
+/** MariaDB and MySQL describe defaults differently; remembered per session. */
+async function isMaria(s) {
+  if (s.isMaria === undefined) {
+    try { s.isMaria = /mariadb/i.test(String((await s.conn.execute('SELECT VERSION()')).rows[0][0])); } catch { s.isMaria = false; }
+  }
+  return s.isMaria;
+}
+
+/**
+ * A column's default as SQL, the way it would be written in DDL. MariaDB already reports that ('Cairo', 0,
+ * current_timestamp(), NULL); MySQL reports literals bare (Cairo) and marks expressions DEFAULT_GENERATED.
+ */
+function defaultSql(def, type, extra, maria) {
+  if (def === null || def === undefined) return null;
+  const v = String(def);
+  if (maria) return v.toUpperCase() === 'NULL' ? null : v;
+  if (/DEFAULT_GENERATED/i.test(extra || '')) return /^(current_timestamp|now|localtime)/i.test(v) || /^\(.*\)$/.test(v) ? v : `(${v})`;
+  if (kindOf(type) === 'number' && /^-?\d+(\.\d+)?$/.test(v)) return v;
+  if (/^b'[01]*'$/i.test(v)) return v;
+  return "'" + v.replace(/\\/g, '\\\\').replace(/'/g, "''") + "'";
+}
+
 async function tableColumns(s, schema, table) {
   const key = schema + '.' + table;
   if (s.colCache.has(key)) return s.colCache.get(key);
@@ -33,9 +55,10 @@ async function tableColumns(s, schema, table) {
        FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION`,
     [schema, table]
   );
+  const maria = await isMaria(s);
   const cols = r.rows.map(([name, type, fullType, nullable, def, comments, id, extra, key]) => ({
     name, type: String(type).toLowerCase(), fullType, nullable: nullable === 'YES',
-    default: def === null || def === undefined ? null : String(def), comments: comments || null, id: Number(id),
+    default: defaultSql(def, type, extra, maria), comments: comments || null, id: Number(id),
     kind: kindOf(type), identity: /auto_increment/i.test(extra || '') ? 'AUTO_INCREMENT' : null, extra: extra || '', key,
   }));
   s.colCache.set(key, cols);

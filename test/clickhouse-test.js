@@ -172,6 +172,93 @@ const t = async (name, fn) => { await fn(); passed++; console.log('  ok ', name)
     assert.ok(r.text.startsWith('select\n  `a b`,\n  arrayJoin(tags)\nfrom\n  t\nwhere\n  x = 1'), r.text); // case kept: names are case-sensitive
   });
 
+  await t('table design: create (engine, order by, partition, Nullable), alter step by step, truncate, drop', async () => {
+    const spec = {
+      owner: S, name: 'Design_Me', engine: 'MergeTree', partitionBy: 'toYYYYMM(created)',
+      columns: [
+        { name: 'id', type: 'UInt64', nullable: true, default: '' }, // a key column is never Nullable
+        { name: 'created', type: 'DateTime', nullable: false, default: 'now()' },
+        { name: 'city', type: 'LowCardinality(String)', nullable: true, default: "'Cairo'" },
+        { name: 'qty', type: 'Int32', nullable: false, default: '' },
+      ],
+      primaryKey: ['id', 'created'],
+    };
+    assert.strictEqual(await db.createTableSql(W, spec), "CREATE TABLE `lookup_test`.`Design_Me` (\n  `id` UInt64,\n  `created` DateTime DEFAULT now(),\n  `city` LowCardinality(Nullable(String)) DEFAULT 'Cairo',\n  `qty` Int32\n)\nENGINE = MergeTree\nPARTITION BY toYYYYMM(created)\nORDER BY (`id`, `created`)");
+    await assert.rejects(db.createTableSql(W, { ...spec, engine: 'Log' }), /Log engine has no sort key/);
+    await assert.rejects(db.createTableSql(W, { ...spec, columns: [...spec.columns, { name: 'tags', type: 'Array(String)', nullable: true }] }), /Array\(String\) can't be Nullable/);
+    await db.createTable(W, spec);
+    await admin.command({ query: "INSERT INTO lookup_test.Design_Me (id, qty) VALUES (1, 5), (2, 7)" });
+
+    const planOf = async () => {
+      const st = await db.structure(W, S, 'Design_Me');
+      return {
+        st, owner: S, table: 'Design_Me',
+        columns: st.columns.map((c) => ({ orig: { name: c.name, type: c.fullType, nullable: c.nullable, default: c.default, comment: c.comments || '', identity: null }, name: c.name, type: c.fullType, nullable: c.nullable, default: c.default || '', comment: c.comments || '', drop: false })),
+        dropConstraints: [], addConstraints: [], dropIndexes: [], addIndexes: [], toggleConstraints: [], tableComment: { from: st.tableComment, to: st.tableComment },
+      };
+    };
+    let plan = await planOf();
+    assert.deepStrictEqual(plan.st.constraints.map((k) => k.type), ['PRIMARY KEY', 'PARTITION BY']);
+    assert.strictEqual(plan.st.tableComment, '');
+    const col = (n) => plan.columns.find((c) => c.name === n);
+    Object.assign(col('qty'), { name: 'quantity', type: 'Int64', nullable: true, comment: 'how many' });
+    Object.assign(col('city'), { nullable: false, type: 'LowCardinality(String)', default: '' });
+    plan.columns.push({ orig: null, name: 'note', type: 'String', nullable: false, default: "''", comment: 'free text', drop: false });
+    plan.addConstraints.push({ kind: 'CHECK', name: '', check: 'quantity >= 0' });
+    plan.addIndexes.push({ name: '', columns: ['quantity'], type: 'minmax', granularity: 2 });
+    plan.tableComment.to = 'design test';
+    const steps = await db.alterTableSql(W, plan);
+    assert.deepStrictEqual(steps.map((x) => x.sql), [
+      'ALTER TABLE `lookup_test`.`Design_Me` MODIFY COLUMN `city` LowCardinality(String)',
+      'ALTER TABLE `lookup_test`.`Design_Me` MODIFY COLUMN `city` REMOVE DEFAULT',
+      'ALTER TABLE `lookup_test`.`Design_Me` RENAME COLUMN `qty` TO `quantity`',
+      'ALTER TABLE `lookup_test`.`Design_Me` MODIFY COLUMN `quantity` Nullable(Int64)',
+      "ALTER TABLE `lookup_test`.`Design_Me` COMMENT COLUMN `quantity` 'how many'",
+      "ALTER TABLE `lookup_test`.`Design_Me` ADD COLUMN `note` String DEFAULT '' COMMENT 'free text'",
+      'ALTER TABLE `lookup_test`.`Design_Me` ADD CONSTRAINT `Design_Me_chk` CHECK quantity >= 0',
+      'ALTER TABLE `lookup_test`.`Design_Me` ADD INDEX `Design_Me_quantity_idx` `quantity` TYPE minmax GRANULARITY 2',
+      'ALTER TABLE `lookup_test`.`Design_Me` MATERIALIZE INDEX `Design_Me_quantity_idx`',
+      "ALTER TABLE `lookup_test`.`Design_Me` MODIFY COMMENT 'design test'",
+    ]);
+    let r = await db.alterTable(W, plan);
+    assert.ok(r.ok, r.error);
+    let st = await db.structure(W, S, 'Design_Me');
+    const c2 = Object.fromEntries(st.columns.map((c) => [c.name, c]));
+    assert.strictEqual(c2.city.fullType, 'LowCardinality(String)');
+    assert.strictEqual(c2.city.default, null);
+    assert.strictEqual(c2.quantity.fullType, 'Nullable(Int64)');
+    assert.strictEqual(c2.quantity.comments, 'how many');
+    assert.deepStrictEqual(st.columns.map((c) => c.name), ['id', 'created', 'city', 'quantity', 'note']);
+    assert.ok(st.constraints.find((k) => k.name === 'Design_Me_chk' && k.type === 'CHECK'));
+    assert.ok(st.indexes.find((i) => i.name === 'Design_Me_quantity_idx' && /minmax · granularity 2/.test(i.type)));
+    assert.strictEqual(st.tableComment, 'design test');
+    const sums = await one('SELECT toString(sum(quantity)) AS s, any(city) AS c FROM lookup_test.Design_Me');
+    assert.deepStrictEqual(sums, { s: '12', c: 'Cairo' });
+
+    // A key row can't be dropped; a failing step stops and reports what ran (no transactions).
+    plan = await planOf();
+    await assert.rejects(db.alterTableSql(W, { ...plan, dropConstraints: ['PRIMARY KEY'] }), /part of its engine settings/);
+    plan.dropConstraints.push('Design_Me_chk');
+    plan.dropIndexes.push('Design_Me_quantity_idx');
+    plan.columns.find((c) => c.name === 'id').drop = true; // a key column: the server refuses
+    r = await db.alterTable(W, plan);
+    assert.strictEqual(r.ok, false);
+    assert.deepStrictEqual(r.done.map((x) => x.label), ['Drop constraint Design_Me_chk', 'Drop index Design_Me_quantity_idx']);
+    assert.strictEqual(r.failed.label, 'Drop column id');
+    assert.ok(!r.rolledBack);
+    st = await db.structure(W, S, 'Design_Me');
+    assert.ok(!st.constraints.find((k) => k.name === 'Design_Me_chk'));
+    assert.strictEqual(st.indexes.length, 0);
+
+    await db.truncateTable(W, S, 'Design_Me');
+    assert.deepStrictEqual(await one('SELECT toString(count()) AS n FROM lookup_test.Design_Me'), { n: '0' });
+    await db.dropTable(W, S, 'Design_Me');
+    assert.ok(!(await db.objects(W, S)).some((o) => o.name === 'Design_Me'));
+    await db.createTable(W, { owner: S, name: 'log_t', engine: 'Log', columns: [{ name: 'x', type: 'String', nullable: true }], primaryKey: [] });
+    assert.match((await db.ddl(W, S, 'log_t', 'TABLE')), /`x` Nullable\(String\)\n\)\nENGINE = Log/);
+    await db.dropTable(W, S, 'log_t');
+  });
+
   await t('an unreachable server is reported as lost; Reconnect opens again', async () => {
     const lost = [];
     db.setOnLost((id, msg) => lost.push(msg));

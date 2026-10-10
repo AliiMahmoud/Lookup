@@ -5,18 +5,31 @@
   const Lookup = window.Lookup;
   const { TYPE_ICON, S } = Lookup;
 
+  /** This engine's table design description (types, comments, …), with the engine id for its suggestion lists. */
+  const design = () => ({ ...(Lookup.profile().design || {}), listKey: Lookup.engineId() });
+  const D = () => ({
+    alterNote: 'Each statement is DDL: Oracle commits it on its own, so they cannot be rolled back as a group.',
+    openTxNote: 'Structure changes commit automatically in Oracle, which will also commit the uncommitted statements you ran in query tabs.',
+    ...(Lookup.profile().design || {}),
+  });
+
   // ---------- New table ----------
   function openCreateTable() {
     if (!S.current) return;
     const owner = S.schema;
     const tab = window.createTableTab({
       owner,
+      design: design(),
       previewSql: (spec) => api.createTableSql(spec),
       runCreate: (spec) => api.createTable(spec),
       openInEditor: (sql) => Lookup.openQueryTab({ title: 'create_table.sql', text: sql }),
-      confirmProd: async () => !(S.current && S.current.env === 'prod')
-        || confirmBox('Production database', `Create a table in ${owner} on a production connection?`, 'Create', true),
+      confirmProd: async () => {
+        if (S.current && S.current.env === 'prod' && !(await confirmBox('Production database', `Create a table in ${owner} on a production connection?`, 'Create', true))) return false;
+        if (D().commitsOpenTx && S.txPending && !S.autoCommit && !(await confirmBox('Open transaction', D().openTxNote, 'Create', true))) return false;
+        return true;
+      },
       onCreated: async (table) => {
+        if (D().commitsOpenTx && S.txPending) { S.txPending = false; Lookup.renderTitlebar(); Lookup.renderStatus(); }
         S.objCache.delete(owner);
         await Lookup.closeTab(tab.id, true);
         if (S.schema === owner) await Lookup.loadObjects(true);
@@ -50,6 +63,7 @@
           table: tab.name,
           data: s,
           tables: S.objects.filter((o) => o.type === 'TABLE').map((o) => o.name),
+          design: design(),
           loadRef: (o, t) => api.structure(o, t),
           onChange: (n) => {
             bar.classList.toggle('hidden', !n);
@@ -93,7 +107,7 @@
         title: `Pending changes · ${steps.length} statement${steps.length === 1 ? '' : 's'}`,
         wide: true,
         body: h('div', null,
-          h('p', { class: 'muted se-note' }, 'Each statement is DDL: Oracle commits it on its own, so they cannot be rolled back as a group.'),
+          h('p', { class: 'muted se-note' }, D().alterNote),
           h('pre', { class: 'ddl-code boxed', html: window.SqlEditor.highlight(sql) })),
         actions: [
           { label: 'Copy SQL', onClick: () => { api.copy(sql + '\n'); toast('Copied', 'ok'); return false; } },
@@ -114,10 +128,10 @@
     }
     if (!steps.length) { toast('Nothing to apply', 'info'); return; }
     if (S.current && S.current.env === 'prod' && !(await confirmBox('Production database', `Run ${steps.length} structure change(s) on ${tab.owner}.${tab.name} on a production connection?`, 'Apply', true))) return;
-    if (S.txPending && !S.autoCommit && !(await confirmBox('Open transaction', 'Structure changes commit automatically in Oracle, which will also commit the uncommitted statements you ran in query tabs.', 'Apply', true))) return;
+    if (S.txPending && !S.autoCommit && !(await confirmBox('Open transaction', D().openTxNote, 'Apply', true))) return;
     const r = await api.alterTable(tab.structEditor.plan()).catch((e) => ({ ok: false, done: [], error: e.message }));
     S.colCache.delete(tab.owner + '.' + tab.name);
-    if (r.done && r.done.length) { S.txPending = false; Lookup.renderTitlebar(); Lookup.renderStatus(); }
+    if ((r.done && r.done.length) || (r.ok && D().commitsOpenTx)) { S.txPending = false; Lookup.renderTitlebar(); Lookup.renderStatus(); }
     // The Data view must reload with the new columns.
     if (tab.grid) { tab.grid.destroy(); tab.grid = null; }
     tab.data = null;
@@ -125,7 +139,7 @@
     if (r.ok) toast(`Applied ${r.done.length} change${r.done.length === 1 ? '' : 's'}`, 'ok');
     else {
       modal({
-        title: r.done && r.done.length ? `Stopped after ${r.done.length} of ${r.total} statements` : 'Change failed',
+        title: r.done && r.done.length ? `Stopped after ${r.done.length} of ${r.total} statements` : r.rolledBack ? 'Change failed — nothing was changed' : 'Change failed',
         wide: true,
         body: h('div', null,
           r.done && r.done.length ? h('div', null, h('p', { class: 'muted' }, 'These already ran (DDL cannot be rolled back):'),

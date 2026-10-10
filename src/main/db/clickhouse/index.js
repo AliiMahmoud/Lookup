@@ -6,6 +6,7 @@ const { ddl, ddlOn } = require('./ddl');
 const { tableData } = require('./table-data');
 const { runStatement } = require('./query');
 const { tableExportQuery, streamQuery, cancelOn } = require('./export');
+const { createTableSql, createTable, alterTableSql, alterTable, truncateTable, dropTable } = require('./table-admin');
 
 const LOST = /ECONNREFUSED|ECONNRESET|ETIMEDOUT|EHOSTUNREACH|ENOTFOUND|EPIPE|socket hang up/i;
 
@@ -42,4 +43,6 @@ module.exports = {
   runStatement,
   // exports
   tableExportQuery, streamQuery, cancelOn,
+  // New table / Structure / truncate / drop (no transactions: steps run one by one)
+  createTableSql, createTable, alterTableSql, alterTable, truncateTable, dropTable,
 };
