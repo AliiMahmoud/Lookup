@@ -254,7 +254,10 @@ real state via `txOpen`), export, databases menu (PG), lost connections, SQL Dev
 PG/MySQL connections (`LookupEngine` fields).
 
 Redis: done (key browser, key tabs for string / hash / list / set / zset / stream / JSON, Workbench, Shell,
-Overview), including Redis Cluster. Not yet: Sentinel, SSH tunnel, bulk delete by pattern, key export.
+Overview), including Redis Cluster, and delete by pattern (folder menu / trash icon: `countMatching` then
+`deleteMatching` in 1.5 s steps with a cursor, SCAN COUNT 5000 + UNLINK in 500s; `*` alone is refused; the window
+asks with the exact count and, on Production, makes you type the pattern, then sends `confirmed: true`).
+Not yet: Sentinel, SSH tunnel, key export.
 
 MongoDB: done (form, tree, Documents with edits, Aggregations, Schema, Indexes, Validation, light Shell, Overview,
 Stop, read-only / Production). Tested on FerretDB only (no real mongod here). Not yet: Kerberos, SSH tunnel,

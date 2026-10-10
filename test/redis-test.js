@@ -232,6 +232,28 @@ function redisCli(args) {
     await db.disconnect(503);
   });
 
+  await t('delete by pattern: counted first, deleted in steps, only matching keys; read-only blocks, Production asks', async () => {
+    for (let i = 0; i < 6000; i += 1000) await admin.call('MSET', ...Array.from({ length: 1000 }, (_, j) => [`gone:${i + j}`, 'x']).flat());
+    await admin.call('SET', 'gone', 'not under the folder'); await admin.call('SET', 'gonex:1', 'other folder'); await admin.call('SET', 'a*b:1', 'glob');
+    const walk = async (name, params) => { let cursor = '0'; let n = 0; let steps = 0; for (;;) { const r = await op(name, { ...params, cursor }); n += r.count ?? r.deleted; cursor = r.cursor; steps++; if (r.done) return { n, steps }; } };
+    assert.strictEqual((await walk('countMatching', { pattern: 'gone:*' })).n, 6000);
+    await assert.rejects(op('deleteMatching', { pattern: '*' }), /not every key/);
+    await assert.rejects(op('countMatching', { pattern: '' }), /not every key/);
+    await db.connect(504, { ...cfg, readOnly: true });
+    await assert.rejects(db.engineOp(504, 'deleteMatching', { pattern: 'gone:*' }), (e) => e.code === 'READ_ONLY');
+    await db.disconnect(504);
+    await db.connect(505, { ...cfg, env: 'prod' });
+    await assert.rejects(db.engineOp(505, 'deleteMatching', { pattern: 'gone:*' }), (e) => e.code === 'CONFIRM_WRITE');
+    await db.disconnect(505);
+    assert.strictEqual(Number(await admin.call('EXISTS', 'gone:1')), 1); // nothing was deleted by the refused calls
+    assert.strictEqual((await walk('deleteMatching', { pattern: 'gone:*' })).n, 6000);
+    assert.strictEqual((await walk('countMatching', { pattern: 'gone:*' })).n, 0);
+    assert.deepStrictEqual(await Promise.all(['gone', 'gonex:1', 'a*b:1'].map(async (k) => Number(await admin.call('EXISTS', k)))), [1, 1, 1]);
+    // A folder name with glob characters is escaped by the window: a\*b:* matches only that folder.
+    assert.strictEqual((await walk('deleteMatching', { pattern: 'a\\*b:*' })).n, 1);
+    await admin.call('DEL', 'gone', 'gonex:1');
+  });
+
   await t('Workbench replies print exactly like redis-cli', async () => {
     await admin.call('RPUSH', 'nest', ...Array.from({ length: 12 }, (_, i) => `n${i}`));
     const cmds = [

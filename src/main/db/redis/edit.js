@@ -52,23 +52,74 @@ async function rename(s, _ctx, { key, to, confirmed }) {
   return { key: out(inp(to)) };
 }
 
-async function remove(s, _ctx, { keys, confirmed }) {
-  const list = (keys || []).map(inp);
-  if (!list.length) return { removed: 0 };
-  await guard(s, [['DEL', ...list]], confirmed);
+/** Deletes keys (UNLINK, freed in the background; DEL before Redis 4). On a cluster one UNLINK per key. */
+async function unlink(s, list) {
+  if (!list.length) return 0;
   if (s.conn.cluster && list.length > 1) {
     // Keys in different slots can't go in one command on a cluster: one UNLINK per key, per node.
     const r = await s.conn.execute(new Pipe(list.map((k) => ['UNLINK', k]), `UNLINK × ${list.length} keys (one per key)`));
     const err = r.find((x) => x instanceof Error);
     if (err) throw err;
-    return { removed: r.reduce((a, b) => a + b, 0) };
+    return r.reduce((a, b) => a + b, 0);
   }
-  let n;
-  try { n = await s.conn.execute(new Cmd(['UNLINK', ...list])); } catch (e) {
+  try { return await s.conn.execute(new Cmd(['UNLINK', ...list])); } catch (e) {
     if (!/unknown command/i.test(e.message)) throw e;
-    n = await s.conn.execute(new Cmd(['DEL', ...list])); // Redis before 4.0
+    return s.conn.execute(new Cmd(['DEL', ...list])); // Redis before 4.0
   }
-  return { removed: n };
+}
+
+async function remove(s, _ctx, { keys, confirmed }) {
+  const list = (keys || []).map(inp);
+  if (!list.length) return { removed: 0 };
+  await guard(s, [['DEL', ...list]], confirmed);
+  return { removed: await unlink(s, list) };
+}
+
+// ---------- Keys matching a pattern (folder menu: "Delete all keys matching: cart:*") ----------
+const MATCH_COUNT = 5000; // keys the server looks at per SCAN call
+const STEP_MS = 1500; // each call returns after about this long; the window calls again with the cursor
+const BATCH = 500; // keys per UNLINK
+
+function checkPattern(pattern) {
+  const p = String(pattern || '');
+  if (!p.trim() || /^\*+$/.test(p)) throw new Error('Pick a pattern that names part of the keys (like cart:*), not every key');
+  return p;
+}
+
+/** Walks the keys matching the pattern from a cursor for one step: { keys, cursor, done }. */
+async function matchStep(s, pattern, cursor, onKeys) {
+  const masters = s.conn.masterIds();
+  const m = s.conn.cluster ? /^(\d+):(\d+)$/.exec(String(cursor)) : null;
+  let i = m ? Number(m[1]) : 0;
+  let cur = m ? m[2] : String(cursor || '0');
+  const until = Date.now() + STEP_MS;
+  let done = false;
+  do {
+    const [next, keys] = await s.conn.execute(new Cmd(['SCAN', cur, 'MATCH', pattern, 'COUNT', MATCH_COUNT], s.conn.cluster ? masters[i] : undefined));
+    cur = String(next);
+    await onKeys(keys);
+    if (cur === '0') { i++; if (!s.conn.cluster || i >= masters.length) done = true; }
+  } while (!done && Date.now() < until);
+  return { cursor: done ? '0' : s.conn.cluster ? `${i}:${cur}` : cur, done };
+}
+
+/** Counts the keys matching a pattern, one step at a time: { count, cursor, done }. */
+async function countMatching(s, _ctx, { pattern, cursor = '0' }) {
+  const p = checkPattern(pattern);
+  let count = 0;
+  const r = await matchStep(s, p, cursor, async (keys) => { count += keys.length; });
+  return { count, ...r };
+}
+
+/** Deletes the keys matching a pattern, one step at a time: { deleted, cursor, done }. Asked first on Production. */
+async function deleteMatching(s, _ctx, { pattern, cursor = '0', confirmed }) {
+  const p = checkPattern(pattern);
+  await guard(s, [['UNLINK', p]], confirmed);
+  let deleted = 0;
+  const r = await matchStep(s, p, cursor, async (keys) => {
+    for (let i = 0; i < keys.length; i += BATCH) deleted += await unlink(s, keys.slice(i, i + BATCH));
+  });
+  return { deleted, ...r };
 }
 
 /** A new key with a first value: { key, type, value | field+value | member(+score) | fields, ttl }. */
@@ -108,4 +159,4 @@ async function create(s, _ctx, p) {
   return { key: out(k) };
 }
 
-module.exports = { apply, setTtl, rename, remove, create, EDITS };
+module.exports = { apply, setTtl, rename, remove, create, countMatching, deleteMatching, EDITS };

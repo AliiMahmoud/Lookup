@@ -215,3 +215,10 @@ button.r-pill:hover { background: var(--active); }
 .r-membar > div { height: 100%; background: var(--accent); }
 @media (max-width: 1100px) { .r-cards { grid-template-columns: repeat(2, 1fr); } .r-ov-cols { grid-template-columns: 1fr; } }
 .r-scan-btns { display: flex; gap: 6px; flex: 0 0 auto; }
+.r-folder-del { width: 20px; height: 20px; opacity: 0; color: var(--muted); }
+.r-folder-del .ic, .r-folder-del .ic svg { width: 13px; height: 13px; }
+.r-folder:hover .r-folder-del { opacity: 1; }
+.r-folder-del:hover { color: var(--err); background: var(--active); }
+.r-delbar { height: 6px; margin: 4px 0 10px; border-radius: 3px; background: var(--hover); overflow: hidden; }
+.r-delbar-fill { width: 0; height: 100%; background: var(--err); transition: width .2s; }
+.input.invalid { border-color: var(--err); box-shadow: 0 0 0 2px color-mix(in srgb, var(--err) 20%, transparent); }

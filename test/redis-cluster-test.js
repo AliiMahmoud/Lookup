@@ -111,6 +111,17 @@ const t = async (name, fn) => { await fn(); passed++; console.log('  ok ', name)
     await op('shellClose', { id: 'c1' });
   });
 
+  await t('delete by pattern on a cluster: every master, keys in many slots', async () => {
+    await admin.execute(new Pipe(Array.from({ length: 900 }, (_, i) => ['SET', `drop:${i}`, 'x'])));
+    await admin.execute(new Cmd(['SET', 'keep:1', 'x']));
+    const walk = async (name) => { let cursor = '0'; let n = 0; for (;;) { const r = await op(name, { pattern: 'drop:*', cursor }); n += r.count ?? r.deleted; cursor = r.cursor; if (r.done) return n; } };
+    assert.strictEqual(await walk('countMatching'), 900);
+    assert.strictEqual(await walk('deleteMatching'), 900);
+    assert.strictEqual(await walk('countMatching'), 0);
+    assert.strictEqual(await admin.execute(new Cmd(['EXISTS', 'keep:1'])), 1);
+    await admin.execute(new Cmd(['DEL', 'keep:1']));
+  });
+
   await t('Overview: totals over the masters and one row per node', async () => {
     const o = await op('overview');
     assert.strictEqual(o.mode, 'cluster');

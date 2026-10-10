@@ -274,7 +274,12 @@
           title: `${f.path}${R.sep}* · ${fmtNum(f.count)} key${f.count === 1 ? '' : 's'} loaded`,
           onclick: () => { if (R.open.has(f.path)) R.open.delete(f.path); else R.open.add(f.path); paintTree(); },
           oncontextmenu: (e) => folderMenu(e, f),
-        }, icon('chevron', 'chev'), h('span', { class: 'r-folder-name' }, f.name), h('span', { class: 'r-count' }, fmtNum(f.count))));
+        }, icon('chevron', 'chev'), h('span', { class: 'r-folder-name' }, f.name),
+        h('button', {
+          class: 'icon-btn r-folder-del', title: `Delete all keys matching: ${folderPattern(f)}`,
+          onclick: (e) => { e.stopPropagation(); deleteMatching(folderPattern(f), f.path + R.sep); },
+        }, icon('trash')),
+        h('span', { class: 'r-count' }, fmtNum(f.count))));
         if (open) walk(f, depth + 1);
       }
       const keys = [...node.keys].sort((a, b) => textOf(a.key).localeCompare(textOf(b.key), undefined, { numeric: true }));
@@ -303,12 +308,17 @@
     document.querySelectorAll('#tree .r-key').forEach((el) => el.classList.toggle('active', el.dataset.id === id));
   }
 
+  /** The SCAN pattern for every key in a folder: its path (glob characters escaped) + separator + "*". */
+  const escapeGlob = (t) => t.replace(/[*?[\]\\]/g, '\\$&');
+  const folderPattern = (f) => escapeGlob(f.path + R.sep) + '*';
   function folderMenu(e, f) {
     e.preventDefault();
-    const pattern = f.path + R.sep + '*';
+    const pattern = folderPattern(f);
     contextMenu(e.clientX, e.clientY, [
       { label: `Filter to ${pattern}`, icon: 'filter', onClick: () => { const box = $('#r-filter'); box.value = pattern; R.match = pattern; box.dispatchEvent(new Event('input')); } },
       { label: 'Copy pattern', icon: 'copy', onClick: () => api.copy(pattern) },
+      '-',
+      { label: `Delete all keys matching: ${pattern}`, icon: 'trash', danger: true, onClick: () => deleteMatching(pattern, f.path + R.sep) },
       '-',
       { label: R.open.size ? 'Collapse all folders' : 'Expand loaded folders', onClick: () => { if (R.open.size) R.open.clear(); else for (const k of R.keys) { const p = textOf(k.key).split(R.sep); for (let i = 1; i < p.length; i++) R.open.add(p.slice(0, i).join(R.sep)); } paintTree(); } },
     ]);
@@ -365,6 +375,83 @@
       toast('Key renamed', 'ok', 2000);
       return moved;
     } catch (e) { fail(e); return null; }
+  }
+
+  /**
+   * Deletes every key matching a pattern: counts them in Redis first (the folder only shows the keys loaded so far),
+   * asks with the exact number (on Production the pattern must be typed), then deletes in steps with progress and Stop.
+   */
+  async function deleteMatching(pattern, prefix = null) {
+    const where = R.cluster ? 'this cluster' : `db${R.db}`;
+    // 1. Count.
+    let stop = false;
+    const progress = h('p', { class: 'muted' }, 'Counting the keys in Redis…');
+    const counting = modal({ title: 'Delete keys', body: h('div', null, h('p', null, 'Keys matching ', h('code', null, pattern), ` in ${where}`), progress), actions: [{ label: 'Cancel', onClick: () => { stop = true; } }], onClose: () => { stop = true; } });
+    let count = 0;
+    try {
+      let cursor = '0';
+      for (;;) {
+        const r = await Lookup.opCall('countMatching', { pattern, cursor });
+        if (stop) return;
+        count += r.count;
+        cursor = r.cursor;
+        progress.textContent = `Counting… ${fmtNum(count)} found so far`;
+        if (r.done) break;
+      }
+    } catch (e) { counting.close(); fail(e); return; }
+    counting.close();
+    if (!count) { toast(`No keys match ${pattern}`, 'info', 3000); return; }
+    // 2. Ask (type the pattern on Production).
+    const prod = S.current && (S.current.env === 'prod' || S.current.env === 'production');
+    const typed = h('input', { class: 'input mono', spellcheck: 'false', placeholder: pattern });
+    const ok = await new Promise((resolve) => {
+      let answered = false;
+      const m = modal({
+        title: `Delete ${fmtNum(count)} key${count === 1 ? '' : 's'}?`,
+        body: h('div', { class: 'r-confirm' },
+          h('p', null, 'Every key matching ', h('code', null, pattern), ` in ${where} will be deleted. This can't be undone.`),
+          h('pre', { class: 'r-confirm-cmds' }, `SCAN … MATCH ${pattern}\nUNLINK <the ${fmtNum(count)} keys found>`),
+          prod ? h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'This is a Production connection. Type the pattern to confirm'), typed) : null),
+        actions: [
+          { label: 'Cancel', onClick: () => { answered = true; resolve(false); } },
+          { label: `Delete ${fmtNum(count)} key${count === 1 ? '' : 's'}`, kind: 'danger', onClick: () => {
+            if (prod && typed.value !== pattern) { typed.classList.add('invalid'); typed.focus(); return false; }
+            answered = true; resolve(true);
+          } },
+        ],
+        onClose: () => { if (!answered) resolve(false); },
+      });
+      if (!prod) setTimeout(() => m.box.querySelector('.btn.danger').focus(), 0);
+    });
+    if (!ok) return;
+    // 3. Delete in steps.
+    stop = false;
+    let finished = false;
+    let deleted = 0;
+    const bar = h('div', { class: 'r-delbar' }, h('div', { class: 'r-delbar-fill' }));
+    const line = h('p', { class: 'muted' }, 'Deleting…');
+    const running = modal({ title: `Deleting keys matching ${pattern}`, body: h('div', null, bar, line), actions: [{ label: 'Stop', onClick: () => { stop = true; return false; } }], onClose: () => { if (!finished) stop = true; } });
+    let error = null;
+    try {
+      let cursor = '0';
+      for (;;) {
+        const r = await Lookup.opCall('deleteMatching', { pattern, cursor, confirmed: true }); // asked above
+        deleted += r.deleted;
+        cursor = r.cursor;
+        bar.firstChild.style.width = Math.min(100, Math.round((deleted / count) * 100)) + '%';
+        line.textContent = `${fmtNum(deleted)} of about ${fmtNum(count)} deleted`;
+        if (r.done || stop) break;
+      }
+    } catch (e) { error = e; }
+    finished = true;
+    running.close();
+    // 4. The sidebar and open tabs follow.
+    // Open tabs of keys under the folder are closed (their keys are gone).
+    if (prefix !== null) for (const t of [...S.tabs]) if (t.kind === 'rkey' && textOf(t.key).startsWith(prefix)) await Lookup.closeTab(t.id, true);
+    await loadKeyspace();
+    scan(true);
+    if (error) fail(error);
+    else toast(stop ? `Stopped: ${fmtNum(deleted)} key${deleted === 1 ? '' : 's'} deleted` : `${fmtNum(deleted)} key${deleted === 1 ? '' : 's'} deleted`, stop ? 'info' : 'ok', 4000);
   }
 
   async function deleteKey(k) {
@@ -506,7 +593,7 @@
     isRedis, enterRedis, redisWhere, redisStatusItems, redisReconnected, R,
     redisText: textOf, redisKeyId: keyId, redisIsBinary: isBinary, fmtTtl, typeBadge, REDIS_TYPES: TYPES,
     redisKeyChanged: keyChanged, redisKeyGone: keyGone, redisKeyAdded: keyAdded,
-    redisRename: renameKey, redisDelete: deleteKey, redisTtlDialog: ttlDialog, redisNewKey: newKeyDialog,
+    redisRename: renameKey, redisDelete: deleteKey, redisDeleteMatching: deleteMatching, redisTtlDialog: ttlDialog, redisNewKey: newKeyDialog,
     redisPaintActive: paintTreeActive, redisLoadKeyspace: loadKeyspace, redisRefreshMemory: refreshMemory, redisScan: scan,
   });
 })();

@@ -40,6 +40,8 @@ const ops = {
   setTtl: edit.setTtl,
   rename: edit.rename,
   remove: edit.remove,
+  countMatching: edit.countMatching,
+  deleteMatching: edit.deleteMatching,
   create: edit.create,
   command: cli.command,
   stop: cli.stop,
