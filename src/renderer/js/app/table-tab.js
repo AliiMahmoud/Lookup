@@ -26,8 +26,8 @@
     const dataTools = h('div', { class: 'tools' },
       h('button', { class: 'tool', title: 'Filter (Ctrl+F)', onclick: () => tab.toggleFilter() }, icon('filter'), h('span', { class: 'filter-n' })),
       h('button', { class: 'tool', title: 'Refresh (F5)', onclick: () => tab.reload() }, icon('refresh')),
-      type === 'TABLE' && Lookup.feature('editRows') ? h('button', { class: 'tool', title: 'Add row', onclick: () => tab.grid && tab.grid.addRow() }, icon('plus')) : null,
-      type === 'TABLE' && Lookup.feature('editRows') ? h('button', { class: 'tool', title: 'Delete selected rows (Del)', onclick: () => tab.grid && tab.grid.deleteRows(tab.grid.selectedVisualRows()) }, icon('trash')) : null,
+      type === 'TABLE' && Lookup.feature('editRows') ? h('button', { class: 'tool edit-tool', title: 'Add row', onclick: () => tab.grid && tab.grid.addRow() }, icon('plus')) : null,
+      type === 'TABLE' && Lookup.feature('editRows') ? h('button', { class: 'tool edit-tool', title: 'Delete selected rows (Del)', onclick: () => tab.grid && tab.grid.deleteRows(tab.grid.selectedVisualRows()) }, icon('trash')) : null,
       h('button', { class: 'tool', title: 'Export… (Ctrl+E)', onclick: () => Lookup.exportTable(tab) }, icon('download')),
       h('button', { class: 'tool', title: 'Row details', onclick: () => { tab.showDetails = !tab.showDetails; tab.paintDetails(); } }, icon('panel')));
     const toolbar = h('div', { class: 'toolbar' }, seg, dataTools, h('div', { class: 'spacer' }), changesBox);
@@ -43,9 +43,13 @@
     const footer = h('div', { class: 'pager' }, prev, next, pagerInfo, pageSize, h('div', { class: 'spacer' }), timing,
       h('button', { class: 'tool', title: 'Copy the SQL used for this page', onclick: () => tab.data && api.copy(tab.data.sql) }, icon('copy')));
     // Engines without grid editing yet: say so once, above the rows.
-    const readOnlyNote = type === 'TABLE' && !Lookup.feature('editRows')
-      ? h('div', { class: 'ro-note' }, h('strong', null, 'Read-only: '), Lookup.profile().readOnlyNote || `editing ${Lookup.profile().label} rows here comes in a later version. Use a query tab (Ctrl+T) to change data.`)
+    // Engines that can't edit rows say so once, above the rows; an engine that can may still say why this table
+    // can't (no primary key, file opened read-only) once its data has loaded.
+    const readOnlyText = h('span');
+    const readOnlyNote = type === 'TABLE'
+      ? h('div', { class: 'ro-note' + (Lookup.feature('editRows') ? ' hidden' : '') }, h('strong', null, 'Read-only: '), readOnlyText)
       : null;
+    if (readOnlyNote && !Lookup.feature('editRows')) readOnlyText.textContent = Lookup.profile().readOnlyNote || `editing ${Lookup.profile().label} rows here comes in a later version. Use a query tab (Ctrl+T) to change data.`;
     const dataView = h('div', { class: 'view-data' }, ...[readOnlyNote, filterBox, body, footer].filter(Boolean));
     const structView = h('div', { class: 'view-structure hidden scroll' });
     const ddlView = h('div', { class: 'view-ddl hidden' });
@@ -118,6 +122,8 @@
         prev.disabled = tab.offset === 0;
         next.disabled = d.rows.length < tab.limit || (d.total !== null && to >= d.total);
         timing.textContent = fmtMs(d.ms) + (d.editable ? '' : ' · read-only');
+        if (readOnlyNote && d.readOnlyReason) { readOnlyText.textContent = d.readOnlyReason.charAt(0).toUpperCase() + d.readOnlyReason.slice(1); readOnlyNote.classList.remove('hidden'); }
+        dataTools.querySelectorAll('.edit-tool').forEach((b) => { b.disabled = !d.editable; });
         tab.selected = null;
         tab.paintDetails();
         Lookup.cacheColumns(owner, name, d.columns);

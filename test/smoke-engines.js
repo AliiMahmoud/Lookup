@@ -22,6 +22,12 @@ const SQLITE_FILE = path.join(app.getPath('temp'), 'lookup-smoke-shop.db');
 const SHOTS = process.env.SHOTS;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const views = () => webContents.getAllWebContents().filter((w) => w.getURL().includes('index.html') && !w.isDestroyed());
+// Grid edit in the open table tab: first row, one column, typed and Enter; then Ctrl+S commits.
+const GRID_EDIT = (col, value) => `(() => { const t = Lookup.S.tabs.find((x) => x.id === Lookup.S.active); const g = t.grid;
+  g.edit(0, g.columns.findIndex((x) => x.name === ${JSON.stringify(col)})); const i = document.querySelector('.tabview:not(.hidden) .cell-edit');
+  i.value = ${JSON.stringify(value)}; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return g.changeCount(); })()`;
+const CTRL_S = `document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true })); 1`;
+const LAST_TOAST = `[...document.querySelectorAll('.toast')].map((x) => x.textContent).pop() || null`;
 
 async function loadFixtures() {
   const { Client } = require('pg');
@@ -131,11 +137,24 @@ app.on('browser-window-created', (_e, win) => {
       await js(`Lookup.openTableTab('lookup_test', 'orders', 'TABLE', 'data'); 1`);
       await wait(1200);
       out.pgTable = await js(`(() => { const t = document.querySelector('.tabview:not(.hidden)') || document; return {
-        note: (document.querySelector('.ro-note') || {}).textContent,
+        note: (document.querySelector('.ro-note:not(.hidden)') || {}).textContent,
         pager: document.querySelector('.pager-info').textContent,
         addRowButton: !!document.querySelector('.tools [title="Add row"]'),
         heads: [...document.querySelectorAll('.grid .hd .hd-name, .grid th')].slice(0, 4).map((x) => x.textContent) }; })()`);
       await shot('postgres-table', ws);
+      // Grid edit + commit, checked from another connection.
+      await js(`Lookup.openTableTab('lookup_test', 'customers', 'TABLE', 'data'); 1`);
+      await wait(1000);
+      out.pgEdit = { pending: await js(GRID_EDIT('city', 'Edited in grid')), bar: await js(`document.querySelector('.tabview:not(.hidden) .changes').textContent`) };
+      await shot('postgres-edit', ws);
+      await js(CTRL_S);
+      await wait(1200);
+      out.pgEdit.toast = await js(LAST_TOAST);
+      { const { Client } = require('pg'); const c = new Client({ connectionString: PG.toString() }); await c.connect(); out.pgEdit.saved = (await c.query('SELECT city FROM lookup_test.customers WHERE id = 1')).rows[0].city; await c.end(); }
+      await js(`Lookup.openTableTab('lookup_test', 'audit_log', 'TABLE', 'data'); 1`);
+      await wait(1000);
+      out.pgNoKey = await js(`({ note: (document.querySelector('.tabview:not(.hidden) .ro-note:not(.hidden)') || {}).textContent, addDisabled: document.querySelector('.tabview:not(.hidden) .tools [title="Add row"]').disabled })`);
+      await shot('postgres-nokey', ws);
       await js(`[...document.querySelectorAll('.seg button')].find((b) => b.textContent === 'Structure').click(); 1`);
       await wait(800);
       out.pgStructure = await js(`({ editor: !!document.querySelector('.se-bar'), h3: [...document.querySelectorAll('.view-structure h3')].map((x) => x.textContent) })`);
@@ -184,8 +203,15 @@ app.on('browser-window-created', (_e, win) => {
       out.myDbButton = await win.webContents.executeJavaScript(`!!document.querySelector('[title^="Databases on this server"]')`);
       await mj(`Lookup.openTableTab('lookup_test', 'orders', 'TABLE', 'data'); 1`);
       await wait(1200);
-      out.myTable = await mj(`({ note: (document.querySelector('.ro-note') || {}).textContent, pager: document.querySelector('.pager-info').textContent })`);
+      out.myTable = await mj(`({ note: (document.querySelector('.ro-note:not(.hidden)') || {}).textContent, pager: document.querySelector('.pager-info').textContent })`);
       await shot('mysql-table', my);
+      await mj(`Lookup.openTableTab('lookup_test', 'customers', 'TABLE', 'data'); 1`);
+      await wait(1000);
+      out.myEdit = { pending: await mj(GRID_EDIT('city', 'Edited in grid')) };
+      await mj(CTRL_S);
+      await wait(1200);
+      out.myEdit.toast = await mj(LAST_TOAST);
+      { const c = await require('mysql2/promise').createConnection({ host: MY.hostname, port: Number(MY.port) || 3306, user: MY.username, password: MY.password }); out.myEdit.saved = (await c.query('SELECT city FROM lookup_test.customers WHERE id = 1'))[0][0].city; await c.end(); }
       await mj(`Lookup.openQueryTab({ text: "select id, amount, status from orders order by id" }); 1`);
       await wait(400);
       await mj(`document.querySelector('.tabview:not(.hidden) .toolbar .btn.primary').click(); 1`);
@@ -214,8 +240,13 @@ app.on('browser-window-created', (_e, win) => {
       out.liteSections = await lj(`[...document.querySelectorAll('.tree-head span:not(.count)')].map((s) => s.textContent + ' ' + s.parentNode.querySelector('.count').textContent)`);
       await lj(`Lookup.openTableTab('main', 'albums', 'TABLE', 'data'); 1`);
       await wait(1000);
-      out.liteTable = await lj(`({ note: (document.querySelector('.ro-note') || {}).textContent, pager: document.querySelector('.pager-info').textContent })`);
+      out.liteTable = await lj(`({ note: (document.querySelector('.ro-note:not(.hidden)') || {}).textContent, pager: document.querySelector('.pager-info').textContent })`);
       await shot('sqlite-table', lj.view);
+      out.liteEdit = { pending: await lj(GRID_EDIT('title', 'Edited in grid')) };
+      await lj(CTRL_S);
+      await wait(1200);
+      out.liteEdit.toast = await lj(LAST_TOAST);
+      { const { DatabaseSync } = require('node:sqlite'); const f = new DatabaseSync(SQLITE_FILE, { readOnly: true }); out.liteEdit.saved = f.prepare('SELECT title FROM albums WHERE id = 1').get().title; f.close(); }
       await lj(`Lookup.openQueryTab({ text: "select country, count(*) n from artists group by country order by country;\\nupdate artists set country = 'FR' where id = 1;" }); 1`);
       await wait(400);
       await lj(`Lookup.S.tabs.find((x) => x.id === Lookup.S.active).editor.ta.setSelectionRange(0, 0); 1`);
@@ -234,7 +265,7 @@ app.on('browser-window-created', (_e, win) => {
       out.chSections = await cj(`[...document.querySelectorAll('.tree-head span:not(.count)')].map((s) => s.textContent + ' ' + s.parentNode.querySelector('.count').textContent)`);
       await cj(`Lookup.openTableTab('lookup_test', 'events', 'TABLE', 'data'); 1`);
       await wait(1200);
-      out.chTable = await cj(`({ note: (document.querySelector('.ro-note') || {}).textContent, pager: document.querySelector('.pager-info').textContent })`);
+      out.chTable = await cj(`({ note: (document.querySelector('.ro-note:not(.hidden)') || {}).textContent, pager: document.querySelector('.pager-info').textContent })`);
       await cj(`[...document.querySelectorAll('.seg button')].find((b) => b.textContent === 'Structure').click(); 1`);
       await wait(800);
       out.chStructure = await cj(`[...document.querySelectorAll('.view-structure h3')].map((x) => x.textContent)`);

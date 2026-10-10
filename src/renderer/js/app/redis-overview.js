@@ -89,7 +89,7 @@
                 h('td', { class: 'num' }, fmtBytes(n.usedMemory || 0)),
                 h('td', { class: 'num' }, fmtNum(n.opsPerSec)),
                 h('td', { class: 'num' }, fmtNum(n.clients)),
-                h('td', { class: 'mono' }, n.replicas.length ? n.replicas.join(', ') : '—')]))))) : null,
+                h('td', { class: 'mono' }, n.replicas.length ? n.replicas.join(', ') : '—')]))))) : '', // not null: append() would print it as text
         h('div', { class: 'r-ov-cols' },
           h('div', null,
             h('h3', null, 'Keyspace'),

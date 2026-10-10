@@ -109,7 +109,8 @@ const t = async (name, fn) => { await fn(); passed++; console.log('  ok ', name)
     const d = await db.tableData(W, { owner: S, name: 'orders', type: 'TABLE', offset: 0, limit: 50 });
     assert.strictEqual(d.total, 1000);
     assert.strictEqual(d.rows.length, 50);
-    assert.strictEqual(d.editable, false);
+    assert.strictEqual(d.editable, true); // has a primary key
+    assert.strictEqual(d.rowids[0], JSON.stringify(['1']));
     const col = (n) => d.columns.findIndex((c) => c.name === n);
     assert.strictEqual(d.rows[0][col('id')], '1');
     assert.strictEqual(d.columns[col('amount')].fullType, 'numeric(12,2)');
@@ -197,6 +198,61 @@ const t = async (name, fn) => { await fn(); passed++; console.log('  ok ', name)
     assert.strictEqual(r[0].txOpen, false);
     assert.strictEqual((await admin.query('select city from lookup_test.customers where id = 3')).rows[0].city, 'Siwa');
     await db.setAutoCommit(W, false);
+  });
+
+  await t('grid edits by primary key: preview, apply in one transaction, typed values, conflicts, open transaction kept', async () => {
+    await admin.query(`CREATE TABLE lookup_test.edit_me (id integer PRIMARY KEY, name text NOT NULL, n numeric(8,2), d date, j jsonb, arr integer[], flag boolean, at timestamptz)`);
+    await admin.query(`CREATE TABLE lookup_test.edit_two (region text, code integer, label text, PRIMARY KEY (region, code))`);
+    await admin.query(`INSERT INTO lookup_test.edit_me SELECT g, 'row ' || g, g * 1.5, date '2026-01-01' + g, jsonb_build_object('g', g), ARRAY[g, g + 1], g % 2 = 0, timestamptz '2026-01-01 10:00:00+00' FROM generate_series(1, 10) g`);
+    await admin.query(`INSERT INTO lookup_test.edit_two VALUES ('eg', 1, 'one'), ('eg', 2, 'two'), ('sa', 1, 'uno')`);
+    const d = await db.tableData(W, { owner: S, name: 'edit_me', type: 'TABLE' });
+    assert.strictEqual(d.editable, true);
+    assert.deepStrictEqual(d.keyColumns, ['id']);
+    const noKey = await db.tableData(W, { owner: S, name: 'audit_log', type: 'TABLE' });
+    assert.strictEqual(noKey.editable, false);
+    assert.match(noKey.readOnlyReason, /no primary key/);
+    const view = await db.tableData(W, { owner: S, name: 'city_counts', type: 'MATERIALIZED VIEW' });
+    assert.strictEqual(view.editable, false);
+    assert.strictEqual(view.readOnlyReason, null);
+    const rid = (id) => JSON.stringify([String(id)]);
+    const changes = {
+      updates: [{ rowid: rid(1), values: { name: "O'Brien", n: '9.99', d: '2026-03-04', j: '{"x": [1, 2]}', arr: '{7,8}', flag: 'true', at: null } }],
+      inserts: [{ values: { id: '11', name: 'new row', n: '1' } }],
+      deletes: [{ rowid: rid(10) }],
+    };
+    const preview = await db.previewChanges(W, { owner: S, name: 'edit_me', changes });
+    assert.match(preview, /^DELETE FROM lookup_test\.edit_me WHERE id = 10;$/m);
+    assert.match(preview, /^UPDATE lookup_test\.edit_me SET name = 'O''Brien', n = 9\.99, d = '2026-03-04', j = '\{"x": \[1, 2\]\}', arr = '\{7,8\}', flag = 'true', at = NULL WHERE id = 1;$/m);
+    assert.match(preview, /^INSERT INTO lookup_test\.edit_me \(id, name, n\) VALUES \(11, 'new row', 1\);$/m);
+    assert.deepStrictEqual(await db.applyChanges(W, { owner: S, name: 'edit_me', changes }), { count: 3 });
+    const row1 = (await admin.query('SELECT name, n::text, d::text, j::text, arr::text, flag, at FROM lookup_test.edit_me WHERE id = 1')).rows[0];
+    assert.deepStrictEqual(row1, { name: "O'Brien", n: '9.99', d: '2026-03-04', j: '{"x": [1, 2]}', arr: '{7,8}', flag: true, at: null });
+    assert.strictEqual((await admin.query('SELECT count(*)::int AS n FROM lookup_test.edit_me')).rows[0].n, 10);
+    assert.strictEqual((await admin.query('SELECT count(*)::int AS n FROM lookup_test.edit_me WHERE id = 10')).rows[0].n, 0);
+    // Composite key.
+    await db.applyChanges(W, { owner: S, name: 'edit_two', changes: { updates: [{ rowid: JSON.stringify(['eg', '2']), values: { label: 'deux' } }] } });
+    assert.deepStrictEqual((await admin.query("SELECT label FROM lookup_test.edit_two ORDER BY region, code")).rows.map((r) => r.label), ['one', 'deux', 'uno']);
+    // Someone else deleted a row meanwhile: nothing of the batch is saved.
+    await admin.query('DELETE FROM lookup_test.edit_me WHERE id = 5');
+    await assert.rejects(db.applyChanges(W, { owner: S, name: 'edit_me', changes: { updates: [{ rowid: rid(4), values: { name: 'four' } }, { rowid: rid(5), values: { name: 'five' } }] } }), /not found[\s\S]*Nothing was saved[\s\S]*While running:\nUPDATE lookup_test\.edit_me SET name = 'five' WHERE id = 5;/);
+    assert.strictEqual((await admin.query('SELECT name FROM lookup_test.edit_me WHERE id = 4')).rows[0].name, 'row 4');
+    let r = await db.run(W, ['select 1']);
+    assert.strictEqual(r[0].txOpen, false);
+    // Inside the user's open transaction: a failed batch undoes only itself; a good one commits everything.
+    r = await db.run(W, ["update lookup_test.edit_me set name = 'from query tab' where id = 7"]);
+    assert.strictEqual(r[0].txOpen, true);
+    await assert.rejects(db.applyChanges(W, { owner: S, name: 'edit_me', changes: { updates: [{ rowid: rid(6), values: { name: 'six' } }, { rowid: rid(5), values: { name: 'gone' } }] } }), /not found/);
+    r = await db.run(W, ['select name from lookup_test.edit_me where id in (6, 7) order by id']);
+    assert.deepStrictEqual(r[0].rows.map((x) => x[0]), ['row 6', 'from query tab']);
+    assert.strictEqual(r[0].txOpen, true);
+    await db.applyChanges(W, { owner: S, name: 'edit_me', changes: { updates: [{ rowid: rid(6), values: { name: 'six' } }] } });
+    assert.deepStrictEqual((await admin.query('SELECT name FROM lookup_test.edit_me WHERE id IN (6, 7) ORDER BY id')).rows.map((x) => x.name), ['six', 'from query tab']);
+    assert.strictEqual((await db.run(W, ['select 1']))[0].txOpen, false);
+    // A constraint error comes back with the statement, and nothing is saved.
+    await assert.rejects(db.applyChanges(W, { owner: S, name: 'edit_me', changes: { updates: [{ rowid: rid(2), values: { name: 'two' } }], inserts: [{ values: { id: '3', name: 'duplicate key' } }] } }), /duplicate key[\s\S]*INSERT INTO/);
+    assert.strictEqual((await admin.query('SELECT name FROM lookup_test.edit_me WHERE id = 2')).rows[0].name, 'row 2');
+    await assert.rejects(db.applyChanges(W, { owner: S, name: 'audit_log', changes: { deletes: [{ rowid: '["x"]' }] } }), /no primary key/);
+    await admin.query('DROP TABLE lookup_test.edit_me, lookup_test.edit_two');
   });
 
   await t('Stop cancels a running statement and the session stays usable', async () => {

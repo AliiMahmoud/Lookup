@@ -1,5 +1,8 @@
-// SQLite Table Data view: paged rows with filters, sorting and a row count (read-only for now).
-const { qname, buildPageQuery } = require('./sqlgen');
+// SQLite Table Data view: paged rows with filters, sorting and a row count, and grid edits by
+// primary key (previewed, then applied in one transaction; see common/key-edits.js).
+const { qi, qname, buildPageQuery } = require('./sqlgen');
+const { sqlLiteral } = require('./dialect');
+const { keyRowids, buildKeyedChanges, runKeyedChanges } = require('../common/key-edits');
 const { tableColumns, primaryKey } = require('./metadata');
 const { columnsFrom, serializeRows } = require('./values');
 
@@ -21,7 +24,35 @@ async function tableData(s, { owner, name, type, offset = 0, limit = 300, filter
   const rows = serializeRows(r.rows || []);
   const byName = Object.fromEntries(cols.map((c) => [c.name, c]));
   meta.forEach((m) => { const c = byName[m.name]; if (c) { m.fullType = c.fullType; m.nullable = c.nullable; m.type = c.type; m.kind = c.kind; } });
-  return { columns: meta, rows, rowids: null, total, editable: false, keyColumns: keyCols, ms, sql };
+  // Editable when the table has a primary key (rows are matched by it).
+  const rowids = type === 'TABLE' && !(s.cfg && s.cfg.readOnly) && keyCols.length ? keyRowids(meta, rows, keyCols) : null;
+  const readOnlyReason = type !== 'TABLE' ? null
+    : s.cfg && s.cfg.readOnly ? 'this database file was opened read-only.' : !keyCols.length ? 'this table has no primary key, so its rows can\'t be matched safely. Use a query tab (Ctrl+T) to change data.' : null;
+  return { columns: meta, rows, rowids, total, editable: !!rowids, keyColumns: keyCols, readOnlyReason, ms, sql };
 }
 
-module.exports = { tableData };
+/** A grid value as the driver wants it: binaries (shown as hex) back to bytes. */
+const toParam = (v) => (v && typeof v === 'object' && v.$bin !== undefined ? Buffer.from(v.$bin, 'hex') : v);
+
+const dialectOf = (owner, name) => ({ qi, target: qname(owner, name), param: () => '?', literal: (v, type) => sqlLiteral(v, type) ?? 'NULL', toParam });
+
+async function previewChanges(s, { owner, name, changes }) {
+  const cols = await tableColumns(s, owner, name);
+  const keyCols = await primaryKey(s, owner, name);
+  return buildKeyedChanges(dialectOf(owner, name), cols, keyCols, changes).map((x) => x.preview).join('\n');
+}
+
+async function applyChanges(s, { owner, name, changes }) {
+  const cols = await tableColumns(s, owner, name);
+  const keyCols = await primaryKey(s, owner, name);
+  if (!keyCols.length) throw new Error('This table has no primary key, so its rows can\'t be changed from the grid.');
+  const stmts = buildKeyedChanges(dialectOf(owner, name), cols, keyCols, changes);
+  return runKeyedChanges(s, stmts, {
+    inTx: () => !!s.conn.inTx,
+    begin: 'BEGIN',
+    afterBegin: () => { s.conn.inTx = true; },
+    affected: (r) => r.rowsAffected,
+  });
+}
+
+module.exports = { tableData, previewChanges, applyChanges };

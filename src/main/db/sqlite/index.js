@@ -5,7 +5,7 @@ const path = require('path');
 const { open, targetKey } = require('./connect');
 const { schemas, objects, columns, structure } = require('./metadata');
 const { ddl, ddlOn } = require('./ddl');
-const { tableData } = require('./table-data');
+const { tableData, previewChanges, applyChanges } = require('./table-data');
 const { runStatement, inTransaction } = require('./query');
 const { tableExportQuery, streamQuery, cancelOn } = require('./export');
 
@@ -39,7 +39,7 @@ module.exports = {
   // browsing
   schemas, objects, columns, structure, ddl, ddlFor: ddlOn,
   // table data (read-only for now)
-  tableData,
+  tableData, previewChanges, applyChanges,
   // query tabs
   runStatement, inTransaction,
   // exports

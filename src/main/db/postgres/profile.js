@@ -18,7 +18,7 @@ module.exports = {
   systemSchemasLabel: 'System schemas',
   features: {
     databases: true,
-    editRows: false,
+    editRows: true, // grid edits by primary key (tables without one stay read-only)
     createTable: false,
     alterTable: false,
     truncate: false,

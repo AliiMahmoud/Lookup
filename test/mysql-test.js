@@ -106,7 +106,8 @@ const t = async (name, fn) => { await fn(); passed++; console.log('  ok ', name)
     const d = await db.tableData(W, { owner: S, name: 'orders', type: 'TABLE', offset: 0, limit: 50 });
     assert.strictEqual(d.total, 1000);
     assert.strictEqual(d.rows.length, 50);
-    assert.strictEqual(d.editable, false);
+    assert.strictEqual(d.editable, true); // has a primary key
+    assert.strictEqual(d.rowids[0], JSON.stringify(['1']));
     const col = (n) => d.columns.findIndex((c) => c.name === n);
     assert.strictEqual(d.rows[0][col('id')], '1');
     assert.strictEqual(d.columns[col('amount')].fullType, 'decimal(12,2)');
@@ -192,6 +193,48 @@ const t = async (name, fn) => { await fn(); passed++; console.log('  ok ', name)
     assert.strictEqual(r[0].txOpen, false);
     assert.strictEqual((await one('select city from lookup_test.customers where id = 3')).city, 'Siwa');
     await db.setAutoCommit(W, false);
+  });
+
+  await t('grid edits by primary key: preview, apply in one transaction, same value saved again, conflicts, open transaction kept', async () => {
+    await admin.query(`CREATE TABLE lookup_test.edit_me (id INT PRIMARY KEY, name VARCHAR(50) NOT NULL, n DECIMAL(8,2), d DATE, j JSON, flag TINYINT(1), at DATETIME) ENGINE=InnoDB`);
+    await admin.query(`CREATE TABLE lookup_test.edit_two (region VARCHAR(5), code INT, label VARCHAR(20), PRIMARY KEY (region, code)) ENGINE=InnoDB`);
+    await admin.query(`INSERT INTO lookup_test.edit_me VALUES (1,'row 1',1.5,'2026-01-02','{"g":1}',0,'2026-01-01 10:00:00'),(2,'row 2',3,'2026-01-03',NULL,1,NULL),(3,'row 3',4.5,NULL,NULL,0,NULL),(4,'row 4',6,NULL,NULL,1,NULL),(5,'row 5',7.5,NULL,NULL,0,NULL)`);
+    await admin.query(`INSERT INTO lookup_test.edit_two VALUES ('eg',1,'one'),('eg',2,'two')`);
+    const d = await db.tableData(W, { owner: S, name: 'edit_me', type: 'TABLE' });
+    assert.strictEqual(d.editable, true);
+    const noKey = await db.tableData(W, { owner: S, name: 'audit_log', type: 'TABLE' });
+    assert.strictEqual(noKey.editable, false);
+    assert.match(noKey.readOnlyReason, /no primary key/);
+    const rid = (id) => JSON.stringify([String(id)]);
+    const changes = {
+      updates: [{ rowid: rid(1), values: { name: "O'Brien", n: '9.99', d: '2026-03-04', j: '{"x": [1, 2]}', flag: '1', at: null } }],
+      inserts: [{ values: { id: '6', name: 'new row', n: '1' } }],
+      deletes: [{ rowid: rid(5) }],
+    };
+    const preview = await db.previewChanges(W, { owner: S, name: 'edit_me', changes });
+    assert.match(preview, /^DELETE FROM `lookup_test`\.`edit_me` WHERE `id` = 5;$/m);
+    assert.match(preview, /^UPDATE `lookup_test`\.`edit_me` SET `name` = 'O''Brien', `n` = 9\.99, `d` = '2026-03-04', `j` = '\{"x": \[1, 2\]\}', `flag` = 1, `at` = NULL WHERE `id` = 1;$/m);
+    assert.deepStrictEqual(await db.applyChanges(W, { owner: S, name: 'edit_me', changes }), { count: 3 });
+    const [[row1]] = await admin.query("SELECT name, CAST(n AS CHAR) n, CAST(d AS CHAR) d, JSON_EXTRACT(j, '$.x[1]') x, flag, at FROM lookup_test.edit_me WHERE id = 1");
+    assert.deepStrictEqual({ ...row1, x: Number(row1.x) }, { name: "O'Brien", n: '9.99', d: '2026-03-04', x: 2, flag: 1, at: null });
+    assert.deepStrictEqual((await admin.query('SELECT id FROM lookup_test.edit_me ORDER BY id'))[0].map((r) => r.id), [1, 2, 3, 4, 6]);
+    // Saving a value that didn't change still counts as the row being there.
+    assert.deepStrictEqual(await db.applyChanges(W, { owner: S, name: 'edit_me', changes: { updates: [{ rowid: rid(2), values: { name: 'row 2' } }] } }), { count: 1 });
+    await db.applyChanges(W, { owner: S, name: 'edit_two', changes: { updates: [{ rowid: JSON.stringify(['eg', '2']), values: { label: 'deux' } }] } });
+    assert.deepStrictEqual((await admin.query('SELECT label FROM lookup_test.edit_two ORDER BY region, code'))[0].map((r) => r.label), ['one', 'deux']);
+    // Someone else deleted a row meanwhile: nothing of the batch is saved.
+    await admin.query('DELETE FROM lookup_test.edit_me WHERE id = 4');
+    await assert.rejects(db.applyChanges(W, { owner: S, name: 'edit_me', changes: { updates: [{ rowid: rid(3), values: { name: 'three' } }, { rowid: rid(4), values: { name: 'four' } }] } }), /not found[\s\S]*Nothing was saved/);
+    assert.strictEqual((await admin.query('SELECT name FROM lookup_test.edit_me WHERE id = 3'))[0][0].name, 'row 3');
+    // Inside the user's open transaction: a failed batch undoes only itself; a good one commits everything.
+    let r = await db.run(W, ["update lookup_test.edit_me set name = 'from query tab' where id = 2"]);
+    assert.strictEqual(r[0].txOpen, true);
+    await assert.rejects(db.applyChanges(W, { owner: S, name: 'edit_me', changes: { updates: [{ rowid: rid(3), values: { name: 'three' } }, { rowid: rid(4), values: { name: 'gone' } }] } }), /not found/);
+    r = await db.run(W, ['select name from lookup_test.edit_me where id in (2, 3) order by id']);
+    assert.deepStrictEqual(r[0].rows.map((x) => x[0]), ['from query tab', 'row 3']);
+    await db.applyChanges(W, { owner: S, name: 'edit_me', changes: { updates: [{ rowid: rid(3), values: { name: 'three' } }] } });
+    assert.deepStrictEqual((await admin.query('SELECT name FROM lookup_test.edit_me WHERE id IN (2, 3) ORDER BY id'))[0].map((x) => x.name), ['from query tab', 'three']);
+    await admin.query('DROP TABLE lookup_test.edit_me, lookup_test.edit_two');
   });
 
   await t('Stop kills the running query and the session stays usable', async () => {

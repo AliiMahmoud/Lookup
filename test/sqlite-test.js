@@ -173,6 +173,56 @@ INSERT INTO audit_log (message) VALUES ('first'), ('second');
     assert.strictEqual(r[0].rows[0][0], 'Alexandria');
   });
 
+  await t('grid edits by primary key: integer key, composite key (WITHOUT ROWID), no key read-only, conflicts, open transaction kept', async () => {
+    await db.run(W, ['CREATE TABLE edit_me (id INTEGER PRIMARY KEY, name TEXT NOT NULL, n REAL, d TEXT, b BLOB)', "INSERT INTO edit_me (id, name, n, d) VALUES (1, 'row 1', 1.5, '2026-01-02'), (2, 'row 2', 3, NULL), (3, 'row 3', 4.5, NULL), (4, 'row 4', 6, NULL)"]);
+    await db.commit(W);
+    const d = await db.tableData(W, { owner: 'main', name: 'edit_me', type: 'TABLE' });
+    assert.strictEqual(d.editable, true);
+    assert.strictEqual(d.rowids[0], JSON.stringify(['1']));
+    const noKey = await db.tableData(W, { owner: 'main', name: 'audit_log', type: 'TABLE' });
+    assert.strictEqual(noKey.editable, false);
+    assert.match(noKey.readOnlyReason, /no primary key/);
+    const rid = (id) => JSON.stringify([String(id)]);
+    const changes = { updates: [{ rowid: rid(1), values: { name: "O'Brien", n: '9.99', d: null } }], inserts: [{ values: { id: '5', name: 'new row' } }], deletes: [{ rowid: rid(4) }] };
+    const preview = await db.previewChanges(W, { owner: 'main', name: 'edit_me', changes });
+    assert.match(preview, /^UPDATE "main"\."edit_me" SET "name" = 'O''Brien', "n" = 9\.99, "d" = NULL WHERE "id" = 1;$/m);
+    assert.deepStrictEqual(await db.applyChanges(W, { owner: 'main', name: 'edit_me', changes }), { count: 3 });
+    let r = await db.run(W, ['select id, name, n, d from edit_me order by id']);
+    assert.deepStrictEqual(r[0].rows, [['1', "O'Brien", '9.99', null], ['2', 'row 2', '3', null], ['3', 'row 3', '4.5', null], ['5', 'new row', null, null]]);
+    assert.strictEqual(r[0].txOpen, false); // committed
+    // Composite key on a WITHOUT ROWID table.
+    await db.run(W, ["INSERT INTO tags VALUES (1, 'a'), (1, 'b')"]);
+    await db.commit(W);
+    const tg = await db.tableData(W, { owner: 'main', name: 'tags', type: 'TABLE' });
+    assert.strictEqual(tg.editable, true);
+    await db.applyChanges(W, { owner: 'main', name: 'tags', changes: { updates: [{ rowid: JSON.stringify(['1', 'b']), values: { tag: 'c' } }] } });
+    r = await db.run(W, ['select tag from tags where order_id = 1 order by tag']);
+    assert.deepStrictEqual(r[0].rows.map((x) => x[0]), ['a', 'c']);
+    // A row that is gone: nothing of the batch is saved.
+    await assert.rejects(db.applyChanges(W, { owner: 'main', name: 'edit_me', changes: { updates: [{ rowid: rid(2), values: { name: 'two' } }, { rowid: rid(4), values: { name: 'four' } }] } }), /not found[\s\S]*Nothing was saved/);
+    // Inside the user's open transaction: a failed batch undoes only itself; a good one commits everything.
+    r = await db.run(W, ["update edit_me set name = 'from query tab' where id = 3"]);
+    assert.strictEqual(r[0].txOpen, true);
+    await assert.rejects(db.applyChanges(W, { owner: 'main', name: 'edit_me', changes: { updates: [{ rowid: rid(2), values: { name: 'two' } }, { rowid: rid(4), values: { name: 'four' } }] } }), /not found/);
+    r = await db.run(W, ['select name from edit_me where id in (2, 3) order by id']);
+    assert.deepStrictEqual(r[0].rows.map((x) => x[0]), ['row 2', 'from query tab']);
+    await db.applyChanges(W, { owner: 'main', name: 'edit_me', changes: { updates: [{ rowid: rid(2), values: { name: 'two' } }] } });
+    assert.strictEqual(db.inTransaction ? (await db.run(W, ['select 1']))[0].txOpen : false, false);
+    // Seen from another connection: both were committed.
+    await db.connect(W + 2, { ...cfg, autoCommit: true });
+    r = await db.run(W + 2, ['select name from edit_me where id in (2, 3) order by id']);
+    assert.deepStrictEqual(r[0].rows.map((x) => x[0]), ['two', 'from query tab']);
+    await db.disconnect(W + 2);
+    // A file opened read-only can't be edited from the grid.
+    await db.connect(W + 3, { ...cfg, readOnly: true, autoCommit: true });
+    const ro = await db.tableData(W + 3, { owner: 'main', name: 'edit_me', type: 'TABLE' });
+    assert.strictEqual(ro.editable, false);
+    assert.match(ro.readOnlyReason, /read-only/);
+    await db.disconnect(W + 3);
+    await db.run(W, ['DROP TABLE edit_me', 'DELETE FROM tags']);
+    await db.commit(W);
+  });
+
   await t('Stop ends a long query at once; the open transaction is rolled back; the file stays usable', async () => {
     await db.run(W, ["update customers set city = 'Siwa' where id = 3"]);
     const running = db.run(W, ['WITH RECURSIVE g(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM g LIMIT 50000000) SELECT count(*) FROM g']);
