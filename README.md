@@ -57,31 +57,7 @@ Redis and MongoDB aren't SQL, so each gets its own workspace (see **Redis** and 
 
 ## Screenshots
 
-Taken from the running app against the sample databases in [test/docker](test/docker/CONNECTIONS.md). Scroll each row sideways to see more; click an image to see it full size.
-
-**Connections**
-
-| Home: saved connections with their tags; the logo and main shortcuts on the right | New connection: pick the database first | The form for that database, with Test before you connect | Dark theme, and several databases open at once in the left rail |
-| --- | --- | --- | --- |
-| <img width="640" src="docs/screenshots/home.png" alt="Home: saved connections with their tags; the logo and main shortcuts on the right"> | <img width="640" src="docs/screenshots/choose-database.png" alt="New connection: pick the database first"> | <img width="640" src="docs/screenshots/connection-form.png" alt="The form for that database, with Test before you connect"> | <img width="640" src="docs/screenshots/postgres-query-dark.png" alt="Dark theme, and several databases open at once in the left rail"> |
-
-**SQL databases**
-
-| Table data: paging, filters, sorting, row count | Export to CSV, Excel, JSON or SQL INSERT, with the columns you pick | Structure: columns, constraints and indexes (editable on Oracle) | DDL with indexes, comments and triggers |
-| --- | --- | --- | --- |
-| <img width="640" src="docs/screenshots/postgres-table.png" alt="Table data: paging, filters, sorting, row count"> | <img width="640" src="docs/screenshots/export.png" alt="Export to CSV, Excel, JSON or SQL INSERT, with the columns you pick"> | <img width="640" src="docs/screenshots/oracle-structure.png" alt="Structure: columns, constraints and indexes (editable on Oracle)"> | <img width="640" src="docs/screenshots/oracle-ddl.png" alt="DDL with indexes, comments and triggers"> |
-
-**Redis**
-
-| Key browser and a hash key, with the selected value as JSON | Workbench: commands with formatted replies | Shell: prints replies as redis-cli does, with argument hints | Overview: commands per second, memory, clients, slow log |
-| --- | --- | --- | --- |
-| <img width="640" src="docs/screenshots/redis-hash.png" alt="Key browser and a hash key, with the selected value as JSON"> | <img width="640" src="docs/screenshots/redis-workbench.png" alt="Workbench: commands with formatted replies"> | <img width="640" src="docs/screenshots/redis-shell.png" alt="Shell: prints replies as redis-cli does, with argument hints"> | <img width="640" src="docs/screenshots/redis-overview.png" alt="Overview: commands per second, memory, clients, slow log"> |
-
-**MongoDB**
-
-| Documents: Filter / Project / Sort / Limit in mongosh syntax | Aggregations: stages with a live preview of each one | Schema: fields, types and value ranges from a sample | Shell: mongosh-style commands |
-| --- | --- | --- | --- |
-| <img width="640" src="docs/screenshots/mongodb-documents.png" alt="Documents: Filter / Project / Sort / Limit in mongosh syntax"> | <img width="640" src="docs/screenshots/mongodb-aggregation.png" alt="Aggregations: stages with a live preview of each one"> | <img width="640" src="docs/screenshots/mongodb-schema.png" alt="Schema: fields, types and value ranges from a sample"> | <img width="640" src="docs/screenshots/mongodb-shell.png" alt="Shell: mongosh-style commands"> |
+Screenshots of the running app, taken against the sample databases in [test/docker](test/docker/CONNECTIONS.md), are in [docs/screenshots](docs/screenshots/).
 
 ## Installation
 
