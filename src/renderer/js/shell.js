@@ -21,7 +21,8 @@
   gear.append(icon('gear'));
   gear.addEventListener('click', () => { const r = gear.getBoundingClientRect(); api.settingsMenu({ x: Math.round(r.left), y: Math.round(r.bottom + 2), right: Math.round(r.right) }); });
 
-  // Left rail: one tile per open connection (database icon in its tag colour + short name).
+  // Left rail: one tile per open connection: its badge (initials, database colour, tag dot) and name once
+  // connected; a database / plug icon while connecting or empty.
   function renderTabs() {
     const box = document.getElementById('conn-tabs');
     box.innerHTML = '';
@@ -64,8 +65,11 @@
         },
         ondragend: () => { dragId = null; },
       },
-      icon(ws.connected || ws.connecting ? 'db' : 'plug'),
-      h('span', { class: 'rail-name' }, ws.connected ? ws.title : ws.connecting ? 'Connecting' : 'New'),
+      ws.connected && ws.initials
+        ? h('span', { class: 'rail-badge', style: { '--b': ws.badgeColor || 'var(--accent)' } }, ws.initials,
+          env ? h('span', { class: 'rail-env', style: { background: color } }) : null)
+        : icon(ws.connected || ws.connecting ? 'db' : 'plug'),
+      h('span', { class: 'rail-name' + (ws.connected ? ' named' : '') }, ws.connected ? ws.title : ws.connecting ? 'Connecting' : 'New'),
       ws.txPending ? h('span', { class: 'rail-tx' }) : null,
       h('button', {
         class: 'rail-x', title: 'Close (Ctrl+Shift+W)',

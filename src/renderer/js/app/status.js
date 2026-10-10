@@ -23,6 +23,7 @@
       engine: Lookup.engineId(),
       engineLabel: Lookup.profile().label,
       badge: Lookup.engineOf(c).badge,
+      initials: Lookup.initials(c),
       badgeColor: Lookup.engineOf(c).color,
       databasesWord: Lookup.profile().databasesWord || null,
       dbName: S.info.dbName || null,

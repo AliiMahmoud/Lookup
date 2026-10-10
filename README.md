@@ -47,8 +47,8 @@ Saved passwords are still encrypted with the Windows account that saved them, so
 ## Features
 
 **Connections**
-- Home screen: your saved connections on the left, each with a badge for its database (**Oc** Oracle, **Pg** PostgreSQL, **My** MySQL); on the right Lookup's logo and the main shortcuts until you click a connection, which opens its form there (× closes it). Double-click connects
-- **+ New** first asks which database (Oracle / PostgreSQL / MySQL cards; arrow keys and Enter work), then shows that database's form. The form's **Type** row switches an existing connection to another database, keeping name, tag, host and login
+- Home screen: your saved connections on the left, each with a badge of its initials ("Ali Oracle DB" → **AO**) in its database's colour (the tooltip names the database type); on the right Lookup's logo and the main shortcuts until you click a connection, which opens its form there (× closes it). Double-click connects
+- **+ New** first asks which database (Oracle / PostgreSQL / MySQL cards; arrow keys and Enter work), then shows that database's form. While making a new connection, the form's **Type** row switches to another database, keeping name, tag, host and login (a saved connection keeps its type, so editing one doesn't show it)
 - Oracle: Basic (host / port / service name or SID) or a full connect string (EZConnect or TNS descriptor); roles Default, SYSDBA, SYSOPER, SYSBACKUP
 - PostgreSQL and MySQL: host, port, database and SSL (Prefer — SSL when the server has it, like psql —, Require, Require and verify certificate, Off), or a URL (`postgres://…`, `mysql://…`). MariaDB is detected and shown by name
 - SQLite: a database file — **Open file…** or **New file…** (creates an empty database), optionally **read-only**. No password. Attached databases (`ATTACH '…' AS x`) show up as schemas
@@ -60,7 +60,7 @@ Saved passwords are still encrypted with the Windows account that saved them, so
 - Passwords encrypted with the OS keychain (DPAPI on Windows). If no keychain is available, the password is never written to disk and the app asks for it on connect
 
 **Several databases at once**
-- Open connections are listed in a rail on the left (database icon in the tag colour + name; the tooltip says which database type); each has its own sidebar, query tabs, results and transaction
+- Open connections are listed in a rail on the left: a connected one shows its badge (initials in its database's colour, with a dot in its tag colour) and its name under it; the tooltip says which database type; each has its own sidebar, query tabs, results and transaction
 - Click a tile to switch; `+` (or `Ctrl+N`) opens another saved connection; drag tiles to reorder; right-click for Disconnect, Move up / down, Disconnect all others, or hover and click its × (`Ctrl+Shift+W`) to disconnect; disconnecting removes the tile, and an empty "New" tile disappears when you switch away from it
 - `Ctrl+Alt+→` / `Ctrl+Alt+←` next/previous connection, `Ctrl+Alt+1…9` jump to one, `Ctrl+Shift+W` close it
 - Colour tags and an amber dot for an uncommitted transaction show on each tile

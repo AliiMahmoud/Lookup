@@ -30,6 +30,19 @@ html, body.shell { height: 100%; overflow: hidden; background: var(--panel); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;
 }
 .rail-tile.empty .rail-name { text-transform: none; font-weight: 500; font-style: italic; }
+/* Connected: the connection's badge (initials on its database colour, tag dot) and its name as typed, up to two lines */
+.rail-badge {
+  position: relative; display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 8px;
+  background: var(--b); color: #fff; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;
+}
+.rail-env { position: absolute; right: -3px; bottom: -3px; width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 2px var(--side); }
+.rail-tile.active .rail-env { box-shadow: 0 0 0 2px var(--bg); }
+.rail-tile:hover .rail-env { box-shadow: 0 0 0 2px var(--hover); }
+.rail-tile:has(.rail-badge) { gap: 5px; }
+.rail-name.named {
+  text-transform: none; letter-spacing: 0; font-size: 10.5px; line-height: 12px; white-space: normal; word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
 .rail-tx { position: absolute; top: 9px; right: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 2px var(--side); }
 .rail-tile.active .rail-tx { box-shadow: 0 0 0 2px var(--bg); }
 .rail-x {

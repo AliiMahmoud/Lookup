@@ -1,0 +1,378 @@
+<?xml version = '1.0' encoding = 'UTF-8'?>
+<References xmlns="http://xmlns.oracle.com/adf/jndi">
+   <Reference name="Docker Oracle · FREEPDB1 (lookup)" className="oracle.jdeveloper.db.adapter.DatabaseProvider" xmlns="">
+      <Factory className="oracle.jdeveloper.db.adapter.DatabaseProviderFactory1212"/>
+      <RefAddresses>
+         <StringRefAddr addrType="ConnName">
+            <Contents>Docker Oracle · FREEPDB1 (lookup)</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="RaptorConnectionType">
+            <Contents>Oracle</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="subtype">
+            <Contents>oraJDBC</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="oraDriverType">
+            <Contents>thin</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="driver">
+            <Contents>oracle.jdbc.OracleDriver</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="user">
+            <Contents>lookup</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="hostname">
+            <Contents>127.0.0.1</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="port">
+            <Contents>1522</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="serviceName">
+            <Contents>FREEPDB1</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="SavePassword">
+            <Contents>false</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="OS_AUTHENTICATION">
+            <Contents>false</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="KERBEROS_AUTHENTICATION">
+            <Contents>false</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupEnv">
+            <Contents>local</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupPassword">
+            <Contents>lk1:PHNruAGwNC8v1kzR6YqCsw==:jMrmCzKjB6TKlOi9:H142B+F+bME493SXO7E9hA==:KXRED2ST</Contents>
+         </StringRefAddr>
+      </RefAddresses>
+   </Reference>
+   <Reference name="Docker Oracle · ANALYTICSPDB (lookup)" className="oracle.jdeveloper.db.adapter.DatabaseProvider" xmlns="">
+      <Factory className="oracle.jdeveloper.db.adapter.DatabaseProviderFactory1212"/>
+      <RefAddresses>
+         <StringRefAddr addrType="ConnName">
+            <Contents>Docker Oracle · ANALYTICSPDB (lookup)</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="RaptorConnectionType">
+            <Contents>Oracle</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="subtype">
+            <Contents>oraJDBC</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="oraDriverType">
+            <Contents>thin</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="driver">
+            <Contents>oracle.jdbc.OracleDriver</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="user">
+            <Contents>lookup</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="hostname">
+            <Contents>127.0.0.1</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="port">
+            <Contents>1522</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="serviceName">
+            <Contents>ANALYTICSPDB</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="SavePassword">
+            <Contents>false</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="OS_AUTHENTICATION">
+            <Contents>false</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="KERBEROS_AUTHENTICATION">
+            <Contents>false</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupEnv">
+            <Contents>local</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupPassword">
+            <Contents>lk1:PHNruAGwNC8v1kzR6YqCsw==:V3va7irUioWTlOgd:jFcccupanYv7FCXA2dp2Uw==:wzGqyMOP</Contents>
+         </StringRefAddr>
+      </RefAddresses>
+   </Reference>
+   <Reference name="Docker Oracle · CDB root (system)" className="oracle.jdeveloper.db.adapter.DatabaseProvider" xmlns="">
+      <Factory className="oracle.jdeveloper.db.adapter.DatabaseProviderFactory1212"/>
+      <RefAddresses>
+         <StringRefAddr addrType="ConnName">
+            <Contents>Docker Oracle · CDB root (system)</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="RaptorConnectionType">
+            <Contents>Oracle</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="subtype">
+            <Contents>oraJDBC</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="oraDriverType">
+            <Contents>thin</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="driver">
+            <Contents>oracle.jdbc.OracleDriver</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="user">
+            <Contents>system</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="hostname">
+            <Contents>127.0.0.1</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="port">
+            <Contents>1522</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="serviceName">
+            <Contents>FREE</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="SavePassword">
+            <Contents>false</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="OS_AUTHENTICATION">
+            <Contents>false</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="KERBEROS_AUTHENTICATION">
+            <Contents>false</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupEnv">
+            <Contents>local</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupPassword">
+            <Contents>lk1:PHNruAGwNC8v1kzR6YqCsw==:4Fa7bsdjvvrLhvNa:GQPSPpbUrvLAq5A8B2iSIA==:FlV4oxEj</Contents>
+         </StringRefAddr>
+      </RefAddresses>
+   </Reference>
+   <Reference name="Docker PostgreSQL · shop" className="oracle.jdeveloper.db.adapter.DatabaseProvider" xmlns="">
+      <Factory className="oracle.jdeveloper.db.adapter.DatabaseProviderFactory1212"/>
+      <RefAddresses>
+         <StringRefAddr addrType="ConnName">
+            <Contents>Docker PostgreSQL · shop</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="RaptorConnectionType">
+            <Contents>PostgreSQL</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupEngine">
+            <Contents>postgres</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="user">
+            <Contents>lookup</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="hostname">
+            <Contents>127.0.0.1</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="port">
+            <Contents>5432</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupDatabase">
+            <Contents>shop</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupSsl">
+            <Contents>prefer</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="SavePassword">
+            <Contents>false</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupEnv">
+            <Contents>local</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupPassword">
+            <Contents>lk1:PHNruAGwNC8v1kzR6YqCsw==:dAfg7qqhRnw7CwjK:9MQZNhAY8jgamAS5tyLIHA==:CZNB5yjJ</Contents>
+         </StringRefAddr>
+      </RefAddresses>
+   </Reference>
+   <Reference name="Docker MySQL · shop" className="oracle.jdeveloper.db.adapter.DatabaseProvider" xmlns="">
+      <Factory className="oracle.jdeveloper.db.adapter.DatabaseProviderFactory1212"/>
+      <RefAddresses>
+         <StringRefAddr addrType="ConnName">
+            <Contents>Docker MySQL · shop</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="RaptorConnectionType">
+            <Contents>MySQL</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupEngine">
+            <Contents>mysql</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="user">
+            <Contents>lookup</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="hostname">
+            <Contents>127.0.0.1</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="port">
+            <Contents>3306</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupDatabase">
+            <Contents>shop</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupSsl">
+            <Contents>prefer</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="SavePassword">
+            <Contents>false</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupEnv">
+            <Contents>local</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupPassword">
+            <Contents>lk1:PHNruAGwNC8v1kzR6YqCsw==:gzU3aG0JdiQbC+CT:EGjntXcPjlo1xoRNe5o95Q==:pcKmW8f7</Contents>
+         </StringRefAddr>
+      </RefAddresses>
+   </Reference>
+   <Reference name="Docker ClickHouse · shop" className="oracle.jdeveloper.db.adapter.DatabaseProvider" xmlns="">
+      <Factory className="oracle.jdeveloper.db.adapter.DatabaseProviderFactory1212"/>
+      <RefAddresses>
+         <StringRefAddr addrType="ConnName">
+            <Contents>Docker ClickHouse · shop</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="RaptorConnectionType">
+            <Contents>ClickHouse</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupEngine">
+            <Contents>clickhouse</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="user">
+            <Contents>lookup</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="hostname">
+            <Contents>127.0.0.1</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="port">
+            <Contents>8123</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupDatabase">
+            <Contents>shop</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupSsl">
+            <Contents>disable</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="SavePassword">
+            <Contents>false</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupEnv">
+            <Contents>local</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupPassword">
+            <Contents>lk1:PHNruAGwNC8v1kzR6YqCsw==:SV0EjlSj/ag5+39G:E0cYFrhhe8jfC2q6+V1fSQ==:FOMkA0Pm</Contents>
+         </StringRefAddr>
+      </RefAddresses>
+   </Reference>
+   <Reference name="Docker Redis" className="oracle.jdeveloper.db.adapter.DatabaseProvider" xmlns="">
+      <Factory className="oracle.jdeveloper.db.adapter.DatabaseProviderFactory1212"/>
+      <RefAddresses>
+         <StringRefAddr addrType="ConnName">
+            <Contents>Docker Redis</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="RaptorConnectionType">
+            <Contents>Redis</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupEngine">
+            <Contents>redis</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="user">
+            <Contents>lookup</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="hostname">
+            <Contents>127.0.0.1</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="port">
+            <Contents>6379</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupDatabase">
+            <Contents>0</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupSsl">
+            <Contents>disable</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="SavePassword">
+            <Contents>false</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupEnv">
+            <Contents>local</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupPassword">
+            <Contents>lk1:PHNruAGwNC8v1kzR6YqCsw==:BVbZTp+E1KHLZTYa:2BFhmOrBs4H6xYAy71P0Ug==:fhgTrdqG</Contents>
+         </StringRefAddr>
+      </RefAddresses>
+   </Reference>
+   <Reference name="Docker Redis · viewer (read-only user)" className="oracle.jdeveloper.db.adapter.DatabaseProvider" xmlns="">
+      <Factory className="oracle.jdeveloper.db.adapter.DatabaseProviderFactory1212"/>
+      <RefAddresses>
+         <StringRefAddr addrType="ConnName">
+            <Contents>Docker Redis · viewer (read-only user)</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="RaptorConnectionType">
+            <Contents>Redis</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupEngine">
+            <Contents>redis</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="user">
+            <Contents>viewer</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="hostname">
+            <Contents>127.0.0.1</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="port">
+            <Contents>6379</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupDatabase">
+            <Contents>0</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupSsl">
+            <Contents>disable</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupReadOnly">
+            <Contents>true</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="SavePassword">
+            <Contents>false</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupEnv">
+            <Contents>local</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupPassword">
+            <Contents>lk1:PHNruAGwNC8v1kzR6YqCsw==:dYnR3x8D5mTK0PrK:5A0WeeYfLsmWgyn4z9JI7Q==:Jftl8/am</Contents>
+         </StringRefAddr>
+      </RefAddresses>
+   </Reference>
+   <Reference name="Docker MongoDB · shop" className="oracle.jdeveloper.db.adapter.DatabaseProvider" xmlns="">
+      <Factory className="oracle.jdeveloper.db.adapter.DatabaseProviderFactory1212"/>
+      <RefAddresses>
+         <StringRefAddr addrType="ConnName">
+            <Contents>Docker MongoDB · shop</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="RaptorConnectionType">
+            <Contents>MongoDB</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupEngine">
+            <Contents>mongodb</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="user">
+            <Contents>lookup</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="hostname">
+            <Contents>127.0.0.1</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="port">
+            <Contents>27017</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupDatabase">
+            <Contents>shop</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupSsl">
+            <Contents>disable</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupMongo">
+            <Contents>{&quot;srv&quot;:false,&quot;authMechanism&quot;:&quot;DEFAULT&quot;,&quot;authSource&quot;:&quot;admin&quot;,&quot;replicaSet&quot;:&quot;&quot;,&quot;readPreference&quot;:&quot;primary&quot;,&quot;tlsCAFile&quot;:&quot;&quot;,&quot;tlsCertificateKeyFile&quot;:&quot;&quot;}</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="SavePassword">
+            <Contents>false</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupEnv">
+            <Contents>local</Contents>
+         </StringRefAddr>
+         <StringRefAddr addrType="LookupPassword">
+            <Contents>lk1:PHNruAGwNC8v1kzR6YqCsw==:Funx92YhAWXthsrq:ytzHpy6lM6yC/x23JMSxcw==:JmEn4GaN</Contents>
+         </StringRefAddr>
+      </RefAddresses>
+   </Reference>
+</References>

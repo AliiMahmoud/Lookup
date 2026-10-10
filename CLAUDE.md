@@ -193,7 +193,9 @@ it: `in-process-gpu`; hardware acceleration is off by default) and **one shared 
   shows the logo + shortcuts until a connection is clicked (or New / Duplicate); then the form, with
   × to go back. A TablePlus-style home (logo left, form in a dialog) was built and
   then reverted at Ali's request; keep this layout.
-- Left rail of open connections (tiles: database icon in the tag colour, as before — no engine badge, Ali's choice), no duplicate session to the same database
+- Left rail of open connections: a connected tile shows the connection's badge (initials from its name on the
+  database colour, tag dot at its corner) with the name as typed under it (2 lines max); connecting / empty tiles keep
+  the database / plug icon (Ali, Oct 2026). No duplicate session to the same database
   (switch instead), databases menu (database ▾: Oracle PDBs, PostgreSQL databases; hidden for MySQL)
   and **Query** button left in the title bar, gear (settings) top-right.
 - Redis (agreed with mockups, plus a redis-cli Shell at Ali's request): badge **Rd** #d82c20; form Host, Port
@@ -204,8 +206,11 @@ it: `in-process-gpu`; hardware acceleration is off by default) and **one shared 
 - MongoDB (agreed with mockups; Ali chose the **light shell** over bundling mongosh): badge **Mg** #13aa52, port 27017,
   password optional; Compass-like collection tabs (Documents / Aggregations / Schema / Indexes / Validation); title bar
   shows **Shell** and **Aggregation**, Overview on the right. Kerberos not supported; LDAP via PLAIN.
-- Multi-database UI (agreed with mockups): engine badges **Oc / Pg / My / Sq / Ch** (colours #d0473a,
-  #3b74c4, #e48e2a, #0f80cc, #c9a800) on the home list only; SQLite form = file + Open file… / New file… +
+- Multi-database UI (agreed with mockups): engine colours #d0473a Oracle, #3b74c4 PostgreSQL, #e48e2a MySQL,
+  #0f80cc SQLite, #c9a800 ClickHouse. Home-list and rail badges show the connection's **initials from its name**
+  (`Lookup.initials`: "Ali Oracle DB" → AO, "Billing" → Bi) on its database colour (tooltip = type); the engine
+  badges (Oc / Pg / My / Sq / Ch / Rd / Mg) stay on the choose-database cards and Type chips. The Type row shows
+  only for a new connection (editing a saved one can't switch its type); SQLite form = file + Open file… / New file… +
   read-only (no password prompt); ClickHouse form = host/port (8123 ↔ 8443 with HTTPS)/database/user; **+ New** shows choose-database cards, then the form; a **Type**
   row in the form switches engine; PG/MySQL forms: Host, Port, SSL (prefer default), Database, Fields/URL.
   Status bar shows engine + version (MariaDB named as such); PG title shows `database · schema`.

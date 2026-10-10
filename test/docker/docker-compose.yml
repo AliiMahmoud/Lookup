@@ -1,0 +1,133 @@
+# Test databases for trying Lookup by hand: Oracle, PostgreSQL, MySQL, ClickHouse, Redis and MongoDB,
+# each filled with sample data by the "seed" service (test/docker/seed.js). See CONNECTIONS.md.
+#   docker compose -f test/docker/docker-compose.yml up -d        start everything + fill (first run)
+#   docker compose -f test/docker/docker-compose.yml logs -f seed watch the data being loaded
+#   docker compose -f test/docker/docker-compose.yml down -v      remove containers and all data
+# Ports are open on 127.0.0.1 only. Oracle is on 1522 so it does not clash with another Oracle on 1521.
+name: lookup-test
+
+services:
+  oracle:
+    image: gvenzl/oracle-free:latest
+    container_name: lookup-oracle
+    environment:
+      ORACLE_PASSWORD: lookup          # SYS / SYSTEM
+      ORACLE_DATABASE: ANALYTICSPDB    # a second PDB next to FREEPDB1
+      APP_USER: lookup
+      APP_USER_PASSWORD: lookup
+    ports: ["127.0.0.1:1522:1521"]
+    volumes: [oracle-data:/opt/oracle/oradata]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+
+  postgres:
+    image: postgres:16
+    container_name: lookup-postgres
+    environment:
+      POSTGRES_USER: lookup
+      POSTGRES_PASSWORD: lookup
+      POSTGRES_DB: shop
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U lookup -d shop"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  mysql:
+    image: mysql:8.4
+    container_name: lookup-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: lookup
+      MYSQL_USER: lookup
+      MYSQL_PASSWORD: lookup
+      MYSQL_DATABASE: shop
+    ports: ["127.0.0.1:3306:3306"]
+    volumes: [mysql-data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -ulookup -plookup --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: lookup-clickhouse
+    environment:
+      CLICKHOUSE_USER: lookup
+      CLICKHOUSE_PASSWORD: lookup
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    ports: ["127.0.0.1:8123:8123"]
+    volumes: [clickhouse-data:/var/lib/clickhouse]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8123/ping | grep -q Ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:8
+    container_name: lookup-redis
+    command: ["redis-server", "--aclfile", "/etc/redis/users.acl"]
+    ports: ["127.0.0.1:6379:6379"]
+    volumes:
+      - redis-data:/data
+      - ./redis-users.acl:/etc/redis/users.acl:ro
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --user lookup --pass lookup --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  mongodb:
+    image: mongo:7
+    container_name: lookup-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: lookup
+      MONGO_INITDB_ROOT_PASSWORD: lookup
+    ports: ["127.0.0.1:27017:27017"]
+    volumes: [mongodb-data:/data/db]
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet -u lookup -p lookup --authenticationDatabase admin --eval \"db.adminCommand('ping').ok\" | grep -q 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+
+  # Loads the sample data once (skips an engine that already has it), then exits.
+  seed:
+    image: node:22-alpine
+    container_name: lookup-seed
+    working_dir: /app
+    command: ["node", "test/docker/seed.js"]
+    volumes: ["../..:/app:ro"]
+    environment:
+      ORACLE_HOST: oracle
+      ORACLE_PORT: "1521"
+      PG_HOST: postgres
+      MYSQL_HOST: mysql
+      CH_HOST: clickhouse
+      REDIS_HOST: redis
+      MONGO_HOST: mongodb
+    depends_on:
+      oracle: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      mysql: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      mongodb: { condition: service_healthy }
+    restart: "no"
+
+volumes:
+  oracle-data:
+  postgres-data:
+  mysql-data:
+  clickhouse-data:
+  redis-data:
+  mongodb-data:

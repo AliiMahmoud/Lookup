@@ -87,5 +87,13 @@
     return `${c.user || ''}@${where}${c.database ? '/' + c.database : ''}`;
   }
 
-  Object.assign(Lookup, { ENGINES, engineOf, profile, feature, dialect, engineId, qident, qname, fill, target });
+  /** A connection's badge: initials from its name ("Ali Oracle DB" → "AO", "Billing" → "Bi"), else the engine's. */
+  function initials(c) {
+    const words = String((c && (c.name || c.user)) || '').match(/[\p{L}\p{N}]+/gu) || [];
+    if (!words.length) return engineOf(c).badge;
+    if (words.length === 1) return words[0][0].toUpperCase() + (words[0][1] || '').toLowerCase();
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+
+  Object.assign(Lookup, { ENGINES, engineOf, initials, profile, feature, dialect, engineId, qident, qname, fill, target });
 })();

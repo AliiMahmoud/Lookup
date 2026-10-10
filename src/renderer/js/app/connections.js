@@ -52,7 +52,7 @@
             ]);
           },
         },
-        h('span', { class: 'conn-badge engine', style: { '--c': Lookup.engineOf(c).color }, title: Lookup.engineOf(c).label }, Lookup.engineOf(c).badge),
+        h('span', { class: 'conn-badge engine', style: { '--c': Lookup.engineOf(c).color }, title: Lookup.engineOf(c).label }, Lookup.initials(c)),
         h('div', { class: 'conn-item-text' },
           h('div', { class: 'conn-item-name' }, c.name || '(unnamed)', c.env && c.env !== 'none' ? h('span', { class: 'env-tag', style: { '--c': env.color } }, env.label) : null),
           h('div', { class: 'conn-item-sub' }, Lookup.target(c)))));
@@ -334,7 +334,7 @@
             onclick: (e) => { f.mode = m; e.currentTarget.parentNode.querySelectorAll('button').forEach((b) => b.classList.remove('on')); e.currentTarget.classList.add('on'); paintMode(); },
           }, m === 'basic' ? (oracle ? 'Basic' : 'Fields') : (oracle ? 'Connect string' : 'URL')))),
         h('button', { type: 'button', class: 'icon-btn form-close', title: 'Close (back to the start screen)', onclick: () => { S.selectedConn = null; renderWelcome(); } }, icon('x'))),
-      field('Type', typeRow),
+      c.id ? null : field('Type', typeRow), // a saved connection keeps its database type
       field('Name', inp('name', { placeholder: 'e.g. Billing — staging' })),
       field('Tag', envRow),
       modeBox,

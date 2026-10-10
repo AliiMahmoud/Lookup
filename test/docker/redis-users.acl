@@ -1,0 +1,3 @@
+user default on >lookup ~* &* +@all
+user lookup on >lookup ~* &* +@all
+user viewer on >viewer ~* &* +@all -@write -@dangerous +info +keys +config|get
