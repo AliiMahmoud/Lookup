@@ -214,3 +214,4 @@ button.r-pill:hover { background: var(--active); }
 .r-membar { height: 8px; border-radius: 4px; background: var(--hover); overflow: hidden; }
 .r-membar > div { height: 100%; background: var(--accent); }
 @media (max-width: 1100px) { .r-cards { grid-template-columns: repeat(2, 1fr); } .r-ov-cols { grid-template-columns: 1fr; } }
+.r-scan-btns { display: flex; gap: 6px; flex: 0 0 auto; }

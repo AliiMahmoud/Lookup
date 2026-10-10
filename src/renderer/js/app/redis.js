@@ -162,26 +162,50 @@
 
   // ---------- Scanning ----------
   let scanSeq = 0;
-  async function scan(reset) {
+  // Scanning. Browsing (no filter): one step per "Scan more". Filtering: the server is searched step after
+  // step until 300 matches are found or every key was looked at, so a key is found wherever it sits.
+  // "Scan all": steps until the whole database is loaded (Stop ends it).
+  const FILTER_WANT = 300;
+  async function scan(reset, { all = false } = {}) {
     const seq = ++scanSeq;
     if (reset) Object.assign(R, { keys: [], byId: new Map(), cursor: '0', done: false, looked: 0 });
     R.loading = true;
+    R.all = all;
     if (reset) paintTree();
     paintScanbar();
+    const filtering = !!(R.match || R.type);
+    const startCount = R.keys.length;
     try {
-      const r = await rop('scan', { cursor: R.cursor, match: R.match, type: R.type });
-      if (seq !== scanSeq) return; // a newer filter was typed meanwhile
-      for (const k of r.keys) {
-        const id = keyId(k.key);
-        if (R.byId.has(id)) Object.assign(R.byId.get(id), k);
-        else { R.byId.set(id, k); R.keys.push(k); }
-      }
-      Object.assign(R, { cursor: r.cursor, done: r.done, looked: R.looked + r.looked });
+      do {
+        const r = await rop('scan', { cursor: R.cursor, match: R.match, type: R.type });
+        if (seq !== scanSeq) return; // a newer filter was typed, or Stop was pressed
+        for (const k of r.keys) {
+          const id = keyId(k.key);
+          if (R.byId.has(id)) Object.assign(R.byId.get(id), k);
+          else { R.byId.set(id, k); R.keys.push(k); }
+        }
+        Object.assign(R, { cursor: r.cursor, done: r.done, looked: R.looked + r.looked });
+        if (!R.done && (all || filtering)) { paintTree(); paintScanbar(); } // progress while it keeps going
+      } while (!R.done && (all || (filtering && R.keys.length - startCount < FILTER_WANT)));
     } catch (e) {
       if (seq === scanSeq) { fail(e); R.done = true; }
     } finally {
-      if (seq === scanSeq) { R.loading = false; paintTree(); paintScanbar(); }
+      if (seq === scanSeq) { R.loading = false; R.all = false; paintTree(); paintScanbar(); }
     }
+  }
+  /** Ends a running Scan all / search where it is (what was found stays; Scan more goes on from there). */
+  function stopScan() {
+    scanSeq++;
+    R.loading = false;
+    R.all = false;
+    paintTree();
+    paintScanbar();
+  }
+  /** Scan all, asking first when the database is big (every key is kept in the list). */
+  async function scanAll() {
+    const left = R.dbSize === null ? null : Math.max(0, R.dbSize - R.looked);
+    if (left !== null && left > 200000 && !(await confirmBox('Load every key?', `About ${fmtNum(left)} more keys will be read and listed. On a busy server this adds load; you can press Stop at any time.`, 'Scan all'))) return;
+    scan(false, { all: true });
   }
   function paintScanbar() {
     const bar = $('#r-scanbar');
@@ -189,11 +213,19 @@
     bar.innerHTML = '';
     const total = R.dbSize;
     const looked = R.done ? total : Math.min(R.looked, total === null ? R.looked : total);
-    const text = R.loading && !R.keys.length ? 'Scanning…'
-      : R.done ? `${fmtNum(R.keys.length)} key${R.keys.length === 1 ? '' : 's'}${R.match || R.type ? ' found' : ''} · scanned all ${total === null ? '' : fmtNum(total)}`
-        : `Scanned ${fmtNum(looked)}${total === null ? '' : ` of ${fmtNum(total)}`} keys · ${fmtNum(R.keys.length)} shown`;
+    const filtering = !!(R.match || R.type);
+    const of = total === null ? '' : ` of ${fmtNum(total)}`;
+    const text = R.loading && !R.keys.length ? (filtering ? `Searching… ${fmtNum(looked)}${of} keys looked at` : 'Scanning…')
+      : R.done ? `${fmtNum(R.keys.length)} key${R.keys.length === 1 ? '' : 's'}${filtering ? ' found' : ''} · scanned all ${total === null ? '' : fmtNum(total)}`
+        : filtering ? `${fmtNum(R.keys.length)} found · ${fmtNum(looked)}${of} searched`
+          : `${fmtNum(R.keys.length)}${of} keys loaded`;
+    const busy = R.loading;
     bar.append(...[h('span', { class: 'muted' }, text),
-      R.done ? null : h('button', { class: 'btn sm', disabled: R.loading, onclick: () => scan(false) }, R.loading ? 'Scanning…' : 'Scan more')].filter(Boolean));
+      R.done ? null : h('div', { class: 'r-scan-btns' },
+        busy
+          ? h('button', { class: 'btn sm', title: 'Stop scanning (what was found stays)', onclick: stopScan }, 'Stop')
+          : h('button', { class: 'btn sm', title: filtering ? 'Find more matches' : 'Read the next keys', onclick: () => scan(false) }, 'Scan more'),
+        busy ? null : h('button', { class: 'btn sm', title: filtering ? 'Search every key in this database' : 'Load every key in this database', onclick: scanAll }, 'Scan all'))].filter(Boolean));
   }
 
   // ---------- Tree ----------
@@ -224,7 +256,7 @@
     if (!R.keys.length) {
       tree.append(R.loading
         ? h('div', { class: 'tree-loading' }, h('div', { class: 'spinner sm' }), 'Scanning keys…')
-        : h('div', { class: 'empty-small' }, R.match || R.type ? (R.done ? 'No keys match' : 'No matches yet — Scan more looks further') : 'This database has no keys'));
+        : h('div', { class: 'empty-small' }, R.match || R.type ? (R.done ? 'No keys match' : 'No matches found so far — Scan all searches every key') : 'This database has no keys'));
       return;
     }
     const filtering = !!(R.match || R.type);

@@ -3,16 +3,23 @@
 const { Cmd, Pipe } = require('./connect');
 const { out, inp, typeName } = require('./values');
 
-const SCAN_COUNT = 1000; // keys the server looks at per SCAN call
-const WANT = 300; // keys to find per "Scan more"
-const MAX_LOOK = 20000; // keys looked at per "Scan more" at most (sparse matches on big databases)
+const SCAN_COUNT = 1000; // keys the server looks at per SCAN call (browsing)
+const FILTER_COUNT = 5000; // per SCAN call while filtering: matches are sparse, so look at more per round trip
+const WANT = 300; // keys to find per step
+const MAX_LOOK = 20000; // keys looked at per "Scan more" when browsing without a filter
+const STEP_MS = 1500; // a filtering step returns after this long with what it found, so the window shows progress
 
 const hasGlob = (p) => /[*?[\\]/.test(p);
 const escapeGlob = (p) => p.replace(/[*?[\]\\]/g, '\\$&');
+/** Plain text as a SCAN pattern that ignores case: "Cust" -> *[cC][uU][sS][tT]* (Redis MATCH is case-sensitive). */
+const anyCase = (text) => [...text].map((ch) => {
+  const lo = ch.toLowerCase(); const up = ch.toUpperCase();
+  return lo !== up ? `[${lo}${up}]` : escapeGlob(ch);
+}).join('');
 
 /** SCAN's TYPE option needs Redis 6; older servers are filtered after reading each key's type. */
-async function scanStep(s, cursor, match, type, node) {
-  const args = ['SCAN', cursor, 'MATCH', match, 'COUNT', SCAN_COUNT];
+async function scanStep(s, cursor, match, type, node, count = SCAN_COUNT) {
+  const args = ['SCAN', cursor, 'MATCH', match, 'COUNT', count];
   if (type && s.scanType !== false) {
     try {
       return await s.conn.execute(new Cmd([...args, 'TYPE', type === 'json' ? 'ReJSON-RL' : type], node));
@@ -49,12 +56,17 @@ async function describeKeys(s, keys) {
 }
 
 /**
- * One "Scan more" step. match: a pattern (user:*), or plain text = keys containing it (and the exact
- * key first). Returns { keys, cursor, done, looked }.
+ * One scan step. match: a pattern (user:*), or plain text = keys containing it, any case (and the exact
+ * key first). Without a filter a step looks at up to 20,000 keys ("Scan more"); with one it searches the
+ * server for 1.5 s and the window keeps asking until the whole database was searched.
+ * Returns { keys, cursor, done, looked }.
  */
 async function scan(s, _ctx, { cursor = '0', match = '', type = null } = {}) {
   const text = String(match || '').trim();
-  const pattern = !text ? '*' : hasGlob(text) ? text : `*${escapeGlob(text)}*`;
+  const pattern = !text ? '*' : hasGlob(text) ? text : `*${anyCase(text)}*`;
+  const filtering = !!(text || type);
+  const count = filtering ? FILTER_COUNT : SCAN_COUNT;
+  const until = Date.now() + STEP_MS;
   const found = [];
   const seen = new Set();
   // Plain text: the exact key is shown first, without waiting for the scan to reach it.
@@ -66,15 +78,15 @@ async function scan(s, _ctx, { cursor = '0', match = '', type = null } = {}) {
   let { i, cur } = parseCursor(s, cursor);
   let done = false;
   do {
-    const [next, keys] = await scanStep(s, cur, pattern, type, s.conn.cluster ? masters[i] : undefined);
+    const [next, keys] = await scanStep(s, cur, pattern, type, s.conn.cluster ? masters[i] : undefined, count);
     cur = String(next);
-    looked += SCAN_COUNT;
+    looked += count;
     for (const k of keys) {
       const id = Buffer.isBuffer(k) ? k.toString('base64') : k;
       if (!seen.has(id)) { seen.add(id); found.push(k); }
     }
     if (cur === '0') { i++; if (i >= masters.length || !s.conn.cluster) done = true; } // next master
-  } while (!done && found.length < WANT && looked < MAX_LOOK);
+  } while (!done && found.length < WANT && (filtering ? Date.now() < until : looked < MAX_LOOK));
   let keys = await describeKeys(s, found);
   if (type && s.scanType === false) keys = keys.filter((k) => k.type === type);
   const next = done ? '0' : s.conn.cluster ? `${i}:${cur}` : cur;

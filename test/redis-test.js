@@ -123,14 +123,36 @@ function redisCli(args) {
     assert.strictEqual(exact.keys[0].key, 'counter');
     assert.deepStrictEqual((await op('scan', { type: 'zset' })).keys.map((k) => k.key), ['board']);
     assert.deepStrictEqual((await op('scan', { type: 'stream' })).keys.map((k) => k.key), ['events']);
-    // Many keys arrive in steps.
+    // Browsing many keys arrives in steps (a filter reads 5,000 keys per round trip, so bulk:* comes at once).
     let cursor = '0'; let all = 0; let steps = 0;
-    do { const r = await op('scan', { cursor, match: 'bulk:*' }); all += r.keys.length; cursor = r.cursor; steps++; } while (cursor !== '0');
+    do { const r = await op('scan', { cursor }); all += r.keys.filter((k) => /^bulk:/.test(k.key)).length; cursor = r.cursor; steps++; } while (cursor !== '0');
     assert.strictEqual(all, 1500);
     assert.ok(steps > 1);
+    cursor = '0'; all = 0;
+    do { const r = await op('scan', { cursor, match: 'bulk:*' }); all += r.keys.length; cursor = r.cursor; } while (cursor !== '0');
+    assert.strictEqual(all, 1500);
     const bin = (await op('scan', { match: '*' })).keys;
     assert.ok(bin.find((k) => k.key && k.key.b64 === Buffer.from([0xff, 0, 1]).toString('base64')));
     assert.ok(bin.find((k) => k.key === 'جملة'));
+  });
+
+  await t('search reaches every key: 80,000 keys, plain text in any case, searched step by step until found', async () => {
+    for (let i = 0; i < 80000; i += 2000) await admin.call('MSET', ...Array.from({ length: 2000 }, (_, j) => [`big:${i + j}:item`, 'x']).flat());
+    await admin.call('SET', 'deep:Customer:Needle-42', 'here');
+    // What the window does: keep asking while nothing is found and the database isn't fully searched.
+    const search = async (match) => {
+      let cursor = '0'; const found = []; let calls = 0;
+      do { const r = await op('scan', { cursor, match }); found.push(...r.keys.map((k) => k.key)); cursor = r.cursor; calls++; if (r.done) break; } while (!found.length);
+      return { found, calls };
+    };
+    assert.deepStrictEqual((await search('needle-42')).found, ['deep:Customer:Needle-42']); // lower case finds it
+    assert.deepStrictEqual((await search('CUSTOMER:NEEDLE')).found, ['deep:Customer:Needle-42']);
+    assert.deepStrictEqual((await search('deep:*')).found, ['deep:Customer:Needle-42']); // patterns stay as typed
+    assert.deepStrictEqual((await search('deep:customer*')).found, []); // …and case-sensitive, like Redis
+    const none = await search('no-such-key-anywhere');
+    assert.deepStrictEqual(none.found, []);
+    for (let i = 0; i < 80000; i += 5000) await admin.call('DEL', ...Array.from({ length: 5000 }, (_, j) => `big:${i + j}:item`));
+    await admin.call('DEL', 'deep:Customer:Needle-42');
   });
 
   await t('key info and values: string (JSON, Arabic, binary), hash, list pages, set, zset order, stream pages', async () => {
@@ -312,7 +334,7 @@ function redisCli(args) {
 
   await t('SQL log lists what Lookup ran (SCAN, pipelined TYPE / PTTL, MULTI)', async () => {
     const log = db.sqlLog(W).entries.map((e) => e.sql);
-    assert.ok(log.some((l) => /^SCAN 0 MATCH user:\* COUNT 1000$/.test(l)), log.slice(0, 5).join('\n'));
+    assert.ok(log.some((l) => /^SCAN \d+ MATCH \S+ COUNT (1000|5000)$/.test(l)), log.slice(0, 5).join('\n'));
     assert.ok(log.some((l) => /^TYPE \/ PTTL \/ MEMORY USAGE for \d+ keys/.test(l)));
     assert.ok(log.some((l) => /^MULTI\nHSET user:1:profile plan business/.test(l)));
   });
