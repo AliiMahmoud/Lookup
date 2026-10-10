@@ -1,8 +1,8 @@
 // Streaming exporters. Rows arrive in batches of plain values:
 //   null | string | number | { $bin: 'HEX', len }    (dates are 'YYYY-MM-DD HH:MM:SS[.fff]' strings)
-// columns = [{ name, type }]   (type = Oracle type name, e.g. NUMBER, DATE, VARCHAR2)
+// columns = [{ name, type }]   (type = the database's type name, e.g. NUMBER, DATE, VARCHAR2)
+// options.dialect = the engine's dialect (kindOf, qi, sqlLiteral, scriptStart, commit): see db/<engine>/dialect.js
 const fs = require('fs');
-const { kindOf, qi } = require('./sqlgen');
 
 const FORMATS = {
   csv: { ext: 'csv', label: 'CSV' },
@@ -17,7 +17,7 @@ function textOf(v) {
   return String(v);
 }
 
-// Numbers come from Oracle as strings to avoid precision loss; convert only when exact.
+// Numbers come from the database as strings to avoid precision loss; convert only when exact.
 function exactNumber(s) {
   if (typeof s === 'number') return s;
   const n = Number(s);
@@ -78,7 +78,7 @@ class JsonWriter {
   constructor(path, columns, o) {
     this.out = new FileOut(path);
     this.columns = columns;
-    this.kinds = columns.map((c) => kindOf(c.type));
+    this.kinds = columns.map((c) => o.dialect.kindOf(c.type));
     this.lines = o.jsonStyle === 'lines';
     this.first = true;
     if (!this.lines) this.out.write('[\n');
@@ -110,31 +110,6 @@ class JsonWriter {
 }
 
 // ---------- SQL INSERT ----------
-function sqlString(s) {
-  // Oracle string literals are limited to 4000 bytes; longer text is concatenated as CLOB chunks.
-  const esc = (x) => "'" + x.replace(/'/g, "''") + "'";
-  if (Buffer.byteLength(s, 'utf8') <= 3800) return esc(s);
-  const parts = [];
-  for (let i = 0; i < s.length; i += 1000) parts.push('TO_CLOB(' + esc(s.slice(i, i + 1000)) + ')');
-  return parts.join(' || ');
-}
-
-function sqlLiteral(v, type) {
-  if (v === null || v === undefined) return 'NULL';
-  const k = kindOf(type);
-  const t = String(type || '').toUpperCase();
-  if (typeof v === 'object' && v.$bin !== undefined) {
-    if (v.$bin.length / 2 < v.len) return null; // truncated preview, cannot export
-    if (v.len > 2000) return null;
-    return t === 'BLOB' ? `TO_BLOB(HEXTORAW('${v.$bin}'))` : `HEXTORAW('${v.$bin}')`;
-  }
-  const s = String(v);
-  if (k === 'number') return /^-?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(s) ? s : sqlString(s);
-  if (k === 'date') return `TO_DATE('${s.slice(0, 19)}', 'YYYY-MM-DD HH24:MI:SS')`;
-  if (k === 'timestamp') return `TO_TIMESTAMP('${s}', 'YYYY-MM-DD HH24:MI:SS.FF')`;
-  return sqlString(s);
-}
-
 class SqlWriter {
   constructor(path, columns, o) {
     this.out = new FileOut(path);
@@ -143,27 +118,28 @@ class SqlWriter {
     this.batch = Number(o.commitEvery) || 0;
     this.n = 0;
     this.skipped = 0;
-    this.head = `INSERT INTO ${this.target} (${columns.map((c) => qi(c.name)).join(', ')}) VALUES (`;
+    this.d = o.dialect;
+    this.head = `INSERT INTO ${this.target} (${columns.map((c) => this.d.qi(c.name)).join(', ')}) VALUES (`;
     this.out.write(`-- Exported by Lookup on ${new Date().toISOString()}\n`);
     if (o.ddl) this.out.write(o.ddl.trim() + '\n\n');
-    this.out.write('SET DEFINE OFF;\n\n');
+    if (this.d.scriptStart) this.out.write(this.d.scriptStart);
   }
   async rows(batch) {
     for (const r of batch) {
       const vals = [];
       for (let i = 0; i < this.columns.length; i++) {
-        const lit = sqlLiteral(r[i], this.columns[i].type);
+        const lit = this.d.sqlLiteral(r[i], this.columns[i].type);
         if (lit === null) { vals.push('NULL /* binary too large */'); this.skipped++; } else vals.push(lit);
       }
       let s = this.head + vals.join(', ') + ');\n';
       this.n++;
-      if (this.batch && this.n % this.batch === 0) s += 'COMMIT;\n';
+      if (this.d.commit && this.batch && this.n % this.batch === 0) s += this.d.commit + '\n';
       const p = this.out.write(s);
       if (p) await p;
     }
   }
   async close() {
-    if (this.n && (!this.batch || this.n % this.batch !== 0)) this.out.write('COMMIT;\n');
+    if (this.d.commit && this.n && (!this.batch || this.n % this.batch !== 0)) this.out.write(this.d.commit + '\n');
     return this.out.end();
   }
 }
@@ -176,7 +152,7 @@ class XlsxWriter {
     const ExcelJS = require('exceljs');
     this.wb = new ExcelJS.stream.xlsx.WorkbookWriter({ filename: path, useStyles: true, useSharedStrings: false });
     this.columns = columns;
-    this.kinds = columns.map((c) => kindOf(c.type));
+    this.kinds = columns.map((c) => o.dialect.kindOf(c.type));
     this.header = o.header !== false;
     this.sheetName = (o.sheetName || 'Data').replace(/[\\/?*[\]:]/g, '_').slice(0, 28) || 'Data';
     this.sheetNo = 0;
@@ -222,6 +198,7 @@ class XlsxWriter {
 }
 
 function createWriter(format, path, columns, options = {}) {
+  if (!options.dialect) throw new Error('Export needs the database dialect');
   if (format === 'csv') return new CsvWriter(path, columns, options);
   if (format === 'json') return new JsonWriter(path, columns, options);
   if (format === 'sql') return new SqlWriter(path, columns, options);
@@ -229,4 +206,4 @@ function createWriter(format, path, columns, options = {}) {
   throw new Error('Unknown export format ' + format);
 }
 
-module.exports = { FORMATS, createWriter, sqlLiteral, exactNumber, parseLocalDate };
+module.exports = { FORMATS, createWriter, exactNumber, parseLocalDate };

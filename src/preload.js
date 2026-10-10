@@ -1,5 +1,8 @@
 // Safe bridge for a connection workspace: exposes window.api (IPC to the main process) and nothing else.
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
+
+// Main asks every page to hand back memory it no longer uses (after big results are closed, or from the gear menu).
+ipcRenderer.on('mem:trim', () => { try { webFrame.clearCache(); } catch { /* ignore */ } });
 
 // Unwraps { ok, data } / { ok: false, error } from the main process.
 const call = async (channel, ...args) => {
@@ -23,6 +26,8 @@ contextBridge.exposeInMainWorld('api', {
   // Connection-tab plumbing (this page is one tab of a window)
   wsState: (state) => ipcRenderer.send('ws:state', state),
   onWsAction: (cb) => ipcRenderer.on('ws:action', (_e, msg) => cb(msg)),
+  // Hands back caches this page no longer needs (after closing tabs or results).
+  trimMemory: () => { try { webFrame.clearCache(); } catch { /* ignore */ } },
   closeSelf: () => ipcRenderer.send('ws:closeSelf'),
   openConnection: (connId) => ipcRenderer.send('ws:openConnection', connId),
   focusExisting: (connId) => call('ws:focusExisting', connId),
@@ -55,7 +60,7 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('export:progress', fn);
   },
   showInFolder: (p) => call('shell:showItem', p),
-  formatSql: (text) => call('sql:format', text),
+  formatSql: (text, engine) => call('sql:format', text, engine),
   run: (statements, opts) => call('db:run', statements, opts),
   createTableSql: (spec) => call('db:createTableSql', spec),
   createTable: (spec) => call('db:createTable', spec),
@@ -70,17 +75,28 @@ contextBridge.exposeInMainWorld('api', {
   rollback: () => call('db:rollback'),
   previewChanges: (p) => call('db:previewChanges', p),
   applyChanges: (p) => call('db:applyChanges', p),
+  // Engine operations (Redis). Errors come back as data: the bridge would drop their code
+  // (CONFIRM_WRITE, READ_ONLY), which the window needs.
+  op: async (name, params) => {
+    try { return { ok: true, data: await call('db:op', name, params) }; } catch (e) { return { ok: false, error: { message: e.message, code: e.code } }; }
+  },
+  onPush: (cb) => {
+    const fn = (_e, msg) => cb(msg);
+    ipcRenderer.on('db:push', fn);
+    return () => ipcRenderer.removeListener('db:push', fn);
+  },
   history: (connId) => call('history:list', connId),
   addHistory: (connId, sql) => call('history:add', connId, sql),
   exportCsv: (p) => call('file:exportCsv', p),
   openSql: () => call('file:openSql'),
   openConnectionsFile: () => call('conn:openFile'),
   saveConnectionsFile: (text) => call('conn:saveFile', text),
+  pickSqliteFile: (current) => call('sqlite:pickFile', current),
+  newSqliteFile: () => call('sqlite:newFile'),
   sealPasswords: (filePassword) => call('conn:sealPasswords', filePassword),
   openPasswords: (sealed, filePassword) => call('conn:openPasswords', sealed, filePassword),
   saveSql: (p) => call('file:saveSql', p),
   newWindow: () => call('app:newWindow'),
   platform: () => call('app:platform'),
-  version: () => call('app:version'),
   copy: (text) => call('app:copy', text),
 });

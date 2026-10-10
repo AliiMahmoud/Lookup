@@ -3,12 +3,13 @@ const path = require('path');
 const fs = require('fs');
 const { ipcMain, dialog, shell } = require('electron');
 const db = require('../db');
-const { FORMATS } = require('../export');
+// export.js (and exceljs behind it) is loaded on the first export, not at start.
+const exportFormats = () => require('../export').FORMATS;
 const { winFor } = require('../windows');
 const { handle } = require('./handle');
 
 handle('export:pickFile', async (winId, { format, name }) => {
-  const f = FORMATS[format];
+  const f = exportFormats()[format];
   const win = winFor(winId);
   const safe = String(name || 'export').replace(/[\\/:*?"<>|]+/g, '_');
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
@@ -82,6 +83,23 @@ handle('conn:saveFile', async (winId, text) => {
   if (canceled || !filePath) return null;
   fs.writeFileSync(filePath, String(text), 'utf8');
   return filePath;
+});
+
+// SQLite connection form: pick a database file, or create a new empty one.
+const SQLITE_FILES = [{ name: 'SQLite database', extensions: ['db', 'sqlite', 'sqlite3', 'db3', 's3db', 'sl3'] }, { name: 'All files', extensions: ['*'] }];
+handle('sqlite:pickFile', async (winId, current) => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(winFor(winId), {
+    title: 'Open SQLite database', defaultPath: current || undefined, filters: SQLITE_FILES, properties: ['openFile'],
+  });
+  return canceled || !filePaths[0] ? null : filePaths[0];
+});
+handle('sqlite:newFile', async (winId) => {
+  const { canceled, filePath } = await dialog.showSaveDialog(winFor(winId), {
+    title: 'New SQLite database', defaultPath: 'database.db', filters: SQLITE_FILES,
+  });
+  if (canceled || !filePath) return null;
+  if (fs.existsSync(filePath)) throw new Error('A file with that name already exists. Use Open file to connect to it.');
+  return db.createDatabaseFile('sqlite', filePath);
 });
 
 handle('file:saveSql', async (winId, { name, text }) => {

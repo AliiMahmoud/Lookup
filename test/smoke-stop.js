@@ -41,7 +41,7 @@ app.on('browser-window-created', (_e, win) => {
       await ws.executeJavaScript(`Lookup.S.tabs.find((x) => x.kind === 'query').parts.stopBtn.click(); 1`);
       await wait(200);
       out.stopping = await view();
-      finish({ kind: 'error', message: 'ORA-01013: user requested cancel of current operation', code: 'ORA-01013' });
+      finish({ kind: 'error', message: 'ORA-01013: user requested cancel of current operation', code: 'ORA-01013', cancelled: true });
       await wait(400);
       out.cancelled = await view();
       // 2. Server doesn't respond: after 10 s offer Keep waiting / Close session.

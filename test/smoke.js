@@ -15,7 +15,7 @@ app.on('browser-window-created', (_e, win) => {
       await new Promise((r) => setTimeout(r, 1500));
       const ws = webContents.getAllWebContents().find((w) => w.getURL().includes('index.html'));
       const res = await ws.executeJavaScript(`(async () => {
-        const out = { api: typeof window.api, welcome: !!document.querySelector('.home-left .home-btn') };
+        const out = { api: typeof window.api, welcome: !!document.querySelector('.home-intro') };
         out.saved = await window.api.saveConnection({ name: 'smoke', host: '127.0.0.1', port: 1599, service: 'FREEPDB1', user: 'x', password: 'secret' });
         out.list = (await window.api.listConnections()).map((c) => c.name + ':' + c.hasPassword);
         try { await window.api.testConnection({ user: 'x', password: 'y', host: '127.0.0.1', port: 1599, service: 'FREEPDB1' }); out.test = 'connected?'; }

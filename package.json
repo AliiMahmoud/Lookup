@@ -8,14 +8,19 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "test": "node test/run.js && node test/binds-test.js && node test/export-test.js && node test/alter-test.js && node test/lost-test.js",
+    "test": "node test/run.js && node test/binds-test.js && node test/export-test.js && node test/alter-test.js && node test/lost-test.js && node test/pg-test.js && node test/mysql-test.js && node --no-warnings test/sqlite-test.js && node test/clickhouse-test.js && node test/redis-test.js && node test/redis-cluster-test.js && node test/mongodb-test.js",
     "dist:win": "electron-builder --win nsis --x64",
     "dist:portable": "electron-builder --win portable --x64",
     "dist:zip": "electron-builder --win zip --x64"
   },
   "dependencies": {
+    "@clickhouse/client": "^1.24.1",
     "exceljs": "^4.4.0",
+    "mongodb": "^6.21.0",
+    "mysql2": "^3.24.5",
     "oracledb": "^7.0.1",
+    "pg": "^8.23.1",
+    "pg-cursor": "^2.22.1",
     "sql-formatter": "^15.9.0"
   },
   "devDependencies": {

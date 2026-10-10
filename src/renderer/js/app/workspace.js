@@ -21,6 +21,13 @@
     S.active = null;
     Lookup.renderTitlebar();
     Lookup.renderStatus();
+    const own = Lookup.profile().workspace; // Redis / MongoDB have their own screens, loaded on first use
+    if (own === 'redis' || own === 'mongodb') {
+      await Lookup.loadFeature(own);
+      Lookup.renderStatus(); // again, now with the engine's own status-bar items
+      await (own === 'redis' ? Lookup.enterRedis() : Lookup.enterMongo());
+      return;
+    }
     Lookup.renderSidebarShell();
     try {
       S.schemas = await api.schemas();
@@ -55,6 +62,7 @@
       if (action === 'zoom') { Lookup.zoomShortcut(dir); return; }
       if (action === 'connectionLost') { Lookup.connectionLost(message); return; }
       if (action === 'askSeconds') { Lookup.askSeconds(rest); return; }
+      if (action === 'toast') { toast(message, rest.kind || 'info', 4000); return; }
       if (document.querySelector('.modal-back') && action !== 'close' && action !== 'disconnect') return;
       if (action === 'flash') { if (S.current) toast(`Already connected to ${S.current.name || S.current.user} — switched to this tab`, 'info', 2500); return; }
       if (action === 'shown') { if (!S.current && !document.querySelector('.connecting')) Lookup.showWelcome(); return; }
@@ -63,6 +71,9 @@
       else if (action === 'connect' && !S.current) Lookup.connectTo(connId);
       else if (!S.current) return;
       else if (action === 'newQuery') Lookup.openQueryTab();
+      else if (action === 'newShell' && Lookup.openRedisShell) Lookup.openRedisShell();
+      else if (action === 'overview') (Lookup.profile().workspace === 'mongodb' ? Lookup.openMongoOverview : Lookup.openRedisOverview)();
+      else if (action === 'aggregation' && Lookup.openMongoAggregation) Lookup.openMongoAggregation();
       else if (action === 'openAnything') Lookup.openAnything();
       else if (action === 'commit' || action === 'rollback') Lookup.txAction(action);
       else if (action === 'toggleAutoCommit') Lookup.toggleAutoCommit();

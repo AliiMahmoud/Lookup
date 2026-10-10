@@ -46,6 +46,24 @@
       if (next) activate(next.id);
     } else renderTabs();
     Lookup.saveQueryTabs();
+    Lookup.trimSoon();
+  }
+
+  // Memory: closed tabs and results leave caches behind; hand them back a moment later (one trim for a burst of closes).
+  let trimTimer = null;
+  function trimSoon() {
+    clearTimeout(trimTimer);
+    trimTimer = setTimeout(() => { if (window.api.trimMemory) window.api.trimMemory(); }, 1500);
+  }
+  /** Rows held by this connection's tabs (query results and table pages), for the gear menu's memory details. */
+  function memoryUse() {
+    let rows = 0;
+    for (const t of S.tabs) {
+      for (const r of t.results || []) rows += (r && r.rows && r.rows.length) || 0;
+      if (t.data && t.data.rows) rows += t.data.rows.length;
+      if (t.memoryRows) rows += t.memoryRows() || 0; // tabs of other engines can report their own
+    }
+    return { rows, tabs: S.tabs.length };
   }
   // Updates active/dirty classes without rebuilding the tab bar (a rebuild between the
   // two clicks of a double-click would swallow the dblclick event).
@@ -132,5 +150,5 @@
     for (const t of list) await closeTab(t.id);
   }
 
-  Object.assign(Lookup, { addTab, activate, closeTab, paintTabState, renderTabs });
+  Object.assign(Lookup, { addTab, activate, closeTab, paintTabState, renderTabs, trimSoon, memoryUse });
 })();

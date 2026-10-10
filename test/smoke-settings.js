@@ -18,11 +18,22 @@ app.on('browser-window-created', (_e, win) => {
       const openMenu = async () => { await win.webContents.executeJavaScript(`document.getElementById('tb-settings').click()`); await wait(500); return menuItems(); };
       out.menu = (await openMenu())[0];
       // Memory is read each time the menu opens.
-      await clickItem('Memory'); // disabled: nothing happens, menu stays open
+      await clickItem('Memory'); // opens the memory details
       out.stillOpen = await isOpen();
+      out.memoryDetails = ((await menuItems())[1] || []).map((x) => x.replace(/\d+ MB/, 'N MB'));
       await ws.executeJavaScript(`window.__hog = Array.from({ length: 3e6 }, (_, i) => 'row ' + i); 1`);
       await wait(1500);
       out.memoryChanged = (await openMenu())[0][0] !== out.menu[0];
+      // Free unused memory: the big array is dropped first, then the menu action hands memory back and says how much.
+      await require('./menu-helper').layer().executeJavaScript(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); 1`); // close
+      await wait(300);
+      await ws.executeJavaScript(`window.__hog = null; 1`);
+      await openMenu();
+      await clickItem('Memory');
+      await clickItem('Free unused memory');
+      await wait(2500);
+      out.freed = /^(Freed \d+ MB|Nothing more to free) · \d+ MB in use$/.test(await ws.executeJavaScript(`[...document.querySelectorAll('.toast')].map((t) => t.textContent).pop() || ''`));
+      await openMenu();
       // Dark theme.
       await clickItem('Dark theme');
       await wait(500);

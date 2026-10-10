@@ -7,7 +7,7 @@ const { menuItems, clickItem } = require('./menu-helper');
 app.setPath('userData', path.join(app.getPath('temp'), 'lookup-smoke-pdb'));
 fs.rmSync(app.getPath('userData'), { recursive: true, force: true });
 const db = require('../src/main/db');
-db.pdbs = async () => ({ current: 'CDB$ROOT', list: [
+db.databases = async () => ({ current: 'CDB$ROOT', list: [
   { name: 'CDB$ROOT', open: true, openMode: 'READ WRITE', service: 'free', root: true },
   { name: 'FREEPDB1', open: true, openMode: 'READ WRITE', service: 'freepdb1' },
   { name: 'SALESPDB', open: false, openMode: 'MOUNTED', service: 'salespdb' }], note: null });

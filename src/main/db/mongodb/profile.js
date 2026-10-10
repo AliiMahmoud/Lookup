@@ -1,0 +1,30 @@
+// What the workspace UI needs to know about MongoDB. MongoDB isn't SQL, so the window shows its own
+// workspace (workspace: 'mongodb'): database / collection tree, collection tabs, Shell and Overview.
+module.exports = {
+  id: 'mongodb',
+  label: 'MongoDB',
+  badge: 'Mg',
+  workspace: 'mongodb',
+  schemaWord: 'Database',
+  databasesWord: null,
+  queryWord: 'Shell',
+  sections: [],
+  tableTypes: [],
+  dataTypes: [],
+  codeTypes: [],
+  features: {
+    databases: false,
+    transactions: false,
+    editRows: false,
+    createTable: false,
+    alterTable: false,
+    truncate: false,
+    dropTable: false,
+    explain: false,
+    dbmsOutput: false,
+    ddlOptions: false,
+    ddlCommits: false,
+    sequences: false,
+  },
+  defaultPort: 27017,
+};

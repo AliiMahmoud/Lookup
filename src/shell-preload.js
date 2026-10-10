@@ -1,5 +1,8 @@
 // Bridge for the window's title bar (connection tabs).
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
+
+// Main asks every page to hand back memory it no longer uses (after big results are closed, or from the gear menu).
+ipcRenderer.on('mem:trim', () => { try { webFrame.clearCache(); } catch { /* ignore */ } });
 
 contextBridge.exposeInMainWorld('shellApi', {
   platform: process.platform,

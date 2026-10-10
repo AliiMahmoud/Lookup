@@ -6,142 +6,140 @@
   const Lookup = window.Lookup;
   const { ENVS, S } = Lookup;
 
-  // ---------- Home: app info and actions on the left, saved connections on the right ----------
-  function blankConn() {
-    return { id: null, name: '', env: 'none', mode: 'basic', host: 'localhost', port: 1521, serviceType: 'service', service: 'FREEPDB1', user: '', password: '', savePassword: true, role: 'DEFAULT', autoCommit: false, connectString: '' };
+  // ---------- Welcome / connection manager ----------
+  function blankConn(engine = 'oracle') {
+    const base = { id: null, name: '', env: 'none', mode: 'basic', host: 'localhost', user: '', password: '', savePassword: true, autoCommit: false, connectString: '' };
+    if (engine === 'oracle') return { ...base, engine, port: 1521, serviceType: 'service', service: 'FREEPDB1', role: 'DEFAULT' };
+    if (engine === 'sqlite') return { id: null, name: '', env: 'none', engine, file: '', readOnly: false, autoCommit: false, savePassword: false };
+    if (engine === 'clickhouse') return { ...base, engine, port: 8123, database: 'default', user: 'default', ssl: 'disable', autoCommit: true };
+    if (engine === 'mongodb') return { ...base, engine, port: 27017, database: '', srv: false, ssl: 'disable', authMechanism: 'DEFAULT', authSource: '', replicaSet: '', readPreference: 'primary', readOnly: false, autoCommit: true };
+    if (engine === 'redis') return { ...base, engine, port: 6379, database: 0, ssl: 'disable', readOnly: false, autoCommit: true };
+    return { ...base, engine, port: Lookup.ENGINES[engine].port, database: engine === 'postgres' ? 'postgres' : '', ssl: 'prefer' };
   }
-  let appVersion = '';
-  let homeSel = null; // id of the highlighted connection
   async function showWelcome() {
     S.connections = await api.listConnections();
-    if (!appVersion) { try { appVersion = await api.version(); } catch { /* unknown */ } }
     $('#workspace').classList.add('hidden');
-    $('#welcome').classList.remove('hidden');
+    const w = $('#welcome');
+    w.classList.remove('hidden');
     Lookup.renderTitlebar();
     Lookup.renderStatus();
     renderWelcome();
   }
-
-  // Short text under a connection's name: "host : service", or the connect string.
-  const connTarget = (c) => (c.mode === 'string' ? (c.connectString || 'connect string') : `${c.host || 'localhost'} : ${c.service || ''}`);
-  const initials = (c) => {
-    const words = String(c.name || c.user || '?').replace(/[^\p{L}\p{N} ]+/gu, ' ').trim().split(/\s+/);
-    const two = words.length > 1 ? words[0][0] + words[1][0] : words[0].slice(0, 2);
-    return (two || '?').charAt(0).toUpperCase() + (two.charAt(1) || '').toLowerCase();
-  };
-
   function renderWelcome() {
     const w = $('#welcome');
     w.innerHTML = '';
-    const hasConns = S.connections.length > 0;
-    const bigBtn = (ic, label, onClick, attrs = {}) => h('button', { class: 'home-btn', onclick: onClick, ...attrs }, icon(ic), h('span', null, label));
-    const left = h('div', { class: 'home-left' },
-      h('div', { class: 'home-brand' },
-        h('div', { class: 'home-logo' }),
-        h('h1', null, 'Lookup'),
-        h('div', { class: 'muted' }, appVersion ? `Version ${appVersion}` : 'Oracle Database client')),
-      h('div', { class: 'home-actions' },
-        bigBtn('plug', 'Create Connection', () => editConnection(blankConn())),
-        bigBtn('download', 'Import Connections', () => Lookup.importConnections(), { title: 'From an Oracle SQL Developer export (.xml or .json)' }),
-        bigBtn('upload', 'Export Connections', () => Lookup.exportConnections(), { title: 'For Oracle SQL Developer (.xml, without passwords)', disabled: !hasConns })));
-
-    const search = h('input', { class: 'home-search-input', placeholder: 'Search for connection…', spellcheck: 'false', oninput: () => paintList() });
-    const list = h('div', { class: 'home-list' });
-    let shown = [];
-    const select = (id, scroll) => {
-      homeSel = id;
-      list.querySelectorAll('.home-conn').forEach((el) => el.classList.toggle('sel', el.dataset.id === id));
-      if (scroll) { const el = list.querySelector('.home-conn.sel'); if (el) el.scrollIntoView({ block: 'nearest' }); }
-    };
-    function paintList() {
+    const search = h('input', { class: 'input', placeholder: 'Search connections', oninput: () => paintList() });
+    const list = h('div', { class: 'conn-list' });
+    const paintList = () => {
       const q = search.value.trim().toLowerCase();
       list.innerHTML = '';
-      shown = S.connections.filter((c) => !q || `${c.name} ${c.user} ${c.host} ${c.service} ${c.connectString || ''} ${c.env}`.toLowerCase().includes(q));
-      if (!shown.length) {
-        list.append(hasConns
-          ? h('div', { class: 'home-empty' }, 'No connections match')
-          : h('div', { class: 'home-empty' },
-            h('div', null, 'No connections yet'),
-            h('div', { class: 'home-empty-actions' },
-              h('button', { class: 'btn primary sm', onclick: () => editConnection(blankConn()) }, icon('plus'), 'Create connection'),
-              h('button', { class: 'btn sm', onclick: () => Lookup.importConnections() }, icon('download'), 'Import'))));
-        return;
-      }
-      if (!shown.some((c) => c.id === homeSel)) homeSel = shown[0].id;
-      for (const c of shown) {
-        const env = ENVS[c.env || 'none'] || ENVS.none;
+      const items = S.connections.filter((c) => !q || `${c.name} ${c.user} ${c.host} ${c.service || ''} ${c.database || ''} ${Lookup.engineOf(c).label}`.toLowerCase().includes(q));
+      if (!items.length) list.append(h('div', { class: 'empty-small' }, S.connections.length ? 'No matches' : 'No saved connections yet'));
+      items.forEach((c) => {
+        const env = ENVS[c.env || 'none'];
         list.append(h('div', {
-          class: 'home-conn' + (c.id === homeSel ? ' sel' : ''),
-          'data-id': c.id,
-          title: `${c.user}${c.role && c.role !== 'DEFAULT' ? ' as ' + c.role : ''} · double-click to connect`,
-          onmousedown: () => select(c.id),
+          class: 'conn-item' + (S.selectedConn && S.selectedConn.id === c.id ? ' sel' : ''),
+          onclick: () => { S.selectedConn = { ...c, keepPassword: true, password: '' }; renderWelcome(); },
           ondblclick: () => connectTo(c.id),
-          oncontextmenu: (e) => { e.preventDefault(); select(c.id); connMenu(e.clientX, e.clientY, c); },
+          oncontextmenu: (e) => {
+            e.preventDefault();
+            contextMenu(e.clientX, e.clientY, [
+              { label: 'Connect', icon: 'plug', onClick: () => connectTo(c.id) },
+              { label: 'Connect in a new tab', icon: 'window', onClick: () => (api.openConnection ? api.openConnection(c.id) : api.newWindow()) },
+              { label: 'Duplicate', icon: 'copy', onClick: () => { S.selectedConn = { ...c, id: null, name: c.name + ' copy', password: '', keepPassword: false }; renderWelcome(); } },
+              '-',
+              { label: 'Delete', icon: 'trash', danger: true, onClick: () => deleteConn(c) },
+            ]);
+          },
         },
-        h('span', { class: 'home-badge', style: { '--c': env.color } }, initials(c)),
-        h('div', { class: 'home-conn-text' },
-          h('div', { class: 'home-conn-name' }, h('span', null, c.name || '(unnamed)'),
-            c.env && c.env !== 'none' ? h('span', { class: 'home-conn-env', style: { color: env.color } }, `(${env.label.toLowerCase()})`) : null),
-          h('div', { class: 'home-conn-sub' }, connTarget(c)))));
-      }
-    }
-    // Keyboard: ↑ ↓ to move, Enter to connect, typing goes to the search box.
-    search.addEventListener('keydown', (e) => {
-      const i = shown.findIndex((c) => c.id === homeSel);
-      if (e.key === 'ArrowDown' && shown.length) { e.preventDefault(); select(shown[Math.min(shown.length - 1, i + 1)].id, true); }
-      else if (e.key === 'ArrowUp' && shown.length) { e.preventDefault(); select(shown[Math.max(0, i - 1)].id, true); }
-      else if (e.key === 'Enter' && homeSel && shown.length) { e.preventDefault(); connectTo(homeSel); }
-      else if (e.key === 'Escape' && search.value) { e.preventDefault(); search.value = ''; paintList(); }
-    });
-    const right = h('div', { class: 'home-right' },
-      h('div', { class: 'home-top' },
-        h('button', { class: 'tool home-add', title: 'Create connection', onclick: () => editConnection(blankConn()) }, icon('plus')),
-        h('label', { class: 'home-search' }, icon('search'), search)),
-      list);
+        h('span', { class: 'conn-badge engine', style: { '--c': Lookup.engineOf(c).color }, title: Lookup.engineOf(c).label }, Lookup.engineOf(c).badge),
+        h('div', { class: 'conn-item-text' },
+          h('div', { class: 'conn-item-name' }, c.name || '(unnamed)', c.env && c.env !== 'none' ? h('span', { class: 'env-tag', style: { '--c': env.color } }, env.label) : null),
+          h('div', { class: 'conn-item-sub' }, Lookup.target(c)))));
+      });
+    };
     paintList();
-    w.append(left, right);
-    setTimeout(() => { if (!document.querySelector('.modal-back')) search.focus(); }, 0);
+    const left = h('div', { class: 'welcome-left' },
+      h('div', { class: 'welcome-head' },
+        h('div', null, h('h1', null, 'Connections'), h('p', { class: 'muted' }, 'Click to edit, double-click to connect')),
+        h('div', { class: 'welcome-actions' },
+          h('button', { class: 'tool', title: 'Import connections from an Oracle SQL Developer export (.xml or .json)', onclick: () => Lookup.importConnections() }, icon('open')),
+          h('button', { class: 'tool', title: 'Export connections for Oracle SQL Developer (.xml), optionally with passwords', disabled: !S.connections.length, onclick: () => Lookup.exportConnections() }, icon('download')),
+          h('button', { class: 'btn primary sm', onclick: () => { S.selectedConn = { choosing: true }; renderWelcome(); } }, icon('plus'), 'New'))),
+      search, list);
+    w.append(left, S.selectedConn
+      ? h('div', { class: 'welcome-right' }, S.selectedConn.choosing ? chooseEngine() : connForm(S.selectedConn))
+      : h('div', { class: 'welcome-right welcome-empty' }, homeIntro()));
   }
-
-  function connMenu(x, y, c) {
-    contextMenu(x, y, [
-      { label: 'Connect', icon: 'plug', onClick: () => connectTo(c.id) },
-      { label: 'Connect in a new tab', icon: 'window', onClick: () => (api.openConnection ? api.openConnection(c.id) : api.newWindow()) },
-      '-',
-      { label: 'Edit…', icon: 'edit', onClick: () => editConnection({ ...c, keepPassword: true, password: '' }) },
-      { label: 'Duplicate…', icon: 'copy', onClick: () => editConnection({ ...c, id: null, name: c.name + ' copy', password: '', keepPassword: false }) },
-      '-',
-      { label: 'Delete', icon: 'trash', danger: true, onClick: () => deleteConn(c) },
-    ]);
-  }
-
-  /** The connection form in a dialog: Create Connection, +, or right-click → Edit / Duplicate. */
-  function editConnection(c) {
-    let m = null;
-    const form = connForm(c, {
-      onSaved: (id) => { homeSel = id; m.close(); },
-      onConnect: (id) => { m.close(); connectTo(id); },
-      onDeleted: () => m.close(),
+  // New connection, step 1: which database (Oracle / PostgreSQL / MySQL). Double-click or Continue.
+  function chooseEngine() {
+    let picked = S.lastEngine || 'oracle';
+    const cards = Object.values(Lookup.ENGINES).map((e) => h('button', {
+      type: 'button', class: 'choose-card' + (e.id === picked ? ' on' : ''), style: { '--c': e.color }, 'data-engine': e.id,
+      onclick: (ev) => { picked = e.id; ev.currentTarget.focus(); box.querySelectorAll('.choose-card').forEach((x) => x.classList.toggle('on', x === ev.currentTarget)); },
+      ondblclick: () => go(e.id),
+    }, h('span', { class: 'choose-logo' }, e.badge), h('span', { class: 'choose-name' }, e.label), h('span', { class: 'choose-blurb' }, e.blurb)));
+    const go = (id) => { S.lastEngine = id; S.selectedConn = blankConn(id); renderWelcome(); };
+    const box = h('div', { class: 'choose' },
+      h('h2', null, 'New connection'),
+      h('p', { class: 'muted choose-sub' }, 'Choose the database you want to connect to'),
+      h('div', { class: 'choose-cards' }, cards),
+      h('div', { class: 'choose-actions' },
+        h('button', { type: 'button', class: 'btn', onclick: () => { S.selectedConn = null; renderWelcome(); } }, 'Cancel'),
+        h('button', { type: 'button', class: 'btn primary', onclick: () => go(picked) }, 'Continue')));
+    box.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); S.selectedConn = null; renderWelcome(); }
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        const all = [...box.querySelectorAll('.choose-card')];
+        const i = all.findIndex((x) => x.classList.contains('on'));
+        const next = all[(i + (e.key === 'ArrowRight' ? 1 : all.length - 1)) % all.length];
+        e.preventDefault();
+        next.click();
+      }
     });
-    m = modal({ title: c.id ? `Edit ${c.name || 'connection'}` : 'New connection', body: form, wide: true });
-    m.box.classList.add('conn-dialog');
+    setTimeout(() => { const on = box.querySelector('.choose-card.on'); if (on) on.focus(); }, 0);
+    return box;
   }
-
+  // Right side before a connection is picked: the logo and the main shortcuts.
+  function homeIntro() {
+    const mod = S.platform === 'darwin' ? '⌘' : 'Ctrl';
+    const row = (keys, label) => h('div', null, keys.map((k) => h('kbd', null, k)), h('span', null, label));
+    return h('div', { class: 'empty-state home-intro' },
+      h('div', { class: 'empty-mark' }),
+      h('h2', null, 'Lookup'),
+      h('p', { class: 'muted' }, S.connections.length ? 'Click a connection to edit it, double-click to connect' : 'Click New to add your first connection'),
+      h('div', { class: 'shortcuts' },
+        row(['Click'], 'Edit connection'),
+        row(['Double-click'], 'Connect'),
+        row([mod, 'N'], 'Open a connection'),
+        row([mod, 'T'], 'New query'),
+        row([mod, 'P'], 'Open anything'),
+        row([mod, 'Enter'], 'Run statement'),
+        row([mod, 'S'], 'Commit'),
+        row([mod, 'B'], 'Beautify SQL'),
+        row([mod, 'R'], 'Reconnect')));
+  }
   async function deleteConn(c) {
-    if (!(await confirmBox('Delete connection', `Delete "${c.name || c.user}"? This only removes it from Lookup.`, 'Delete', true))) return false;
+    if (!(await confirmBox('Delete connection', `Delete "${c.name || c.user}"? This only removes it from Lookup.`, 'Delete', true))) return;
     await api.deleteConnection(c.id);
     S.connections = await api.listConnections();
+    if (S.selectedConn && S.selectedConn.id === c.id) S.selectedConn = null;
     renderWelcome();
     Lookup.renderStatus();
-    return true;
   }
   function field(label, control, hint) {
     return h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), control, hint ? h('span', { class: 'field-hint' }, hint) : null);
   }
-  function connForm(c, { onSaved, onConnect, onDeleted } = {}) {
-    const f = { mode: 'basic', serviceType: 'service', role: 'DEFAULT', port: 1521, ...c };
-    for (const k of ['mode', 'serviceType', 'role']) if (!f[k]) f[k] = blankConn()[k];
+  function connForm(c) {
+    const engine = Lookup.engineOf(c);
+    const f = { ...blankConn(engine.id), ...c, engine: engine.id };
+    for (const k of ['mode', 'serviceType', 'role', 'ssl']) if (!f[k] && blankConn(engine.id)[k]) f[k] = blankConn(engine.id)[k];
     if (f.savePassword === undefined) f.savePassword = true;
+    const oracle = engine.id === 'oracle';
+    const fileBased = !!engine.file; // SQLite: a file instead of host and login
+    const redis = engine.id === 'redis';
+    const mongo = engine.id === 'mongodb';
+    const noTx = engine.id === 'clickhouse' || redis || mongo; // no transactions: auto-commit is always on
     const inp = (key, attrs = {}) => {
       const el = h('input', { class: 'input', ...attrs, oninput: (e) => { f[key] = attrs.type === 'number' ? Number(e.target.value) : e.target.value; } });
       el.value = f[key] ?? '';
@@ -159,6 +157,21 @@
       return h('label', { class: 'check' }, el, h('span', null, label));
     };
 
+    // Type: switching keeps name, tag, host and login; the port follows the engine if it was the default.
+    const switchEngine = (id) => {
+      if (id === engine.id) return;
+      const next = { ...blankConn(id), ...f, engine: id, mode: f.mode === 'string' ? 'basic' : f.mode };
+      if (!f.port || Number(f.port) === engine.port) next.port = Lookup.ENGINES[id].port;
+      for (const k of ['serviceType', 'service', 'role', 'database', 'ssl', 'file', 'readOnly', 'srv', 'authMechanism', 'authSource', 'replicaSet', 'readPreference']) if (!(k in blankConn(id))) delete next[k]; else if (next[k] === undefined || k === 'ssl') next[k] = blankConn(id)[k];
+      next.connectString = '';
+      S.selectedConn = { ...next, keepPassword: f.keepPassword, hasPassword: c.hasPassword };
+      S.lastEngine = id;
+      renderWelcome();
+    };
+    const typeRow = h('div', { class: 'type-row' }, Object.values(Lookup.ENGINES).map((e) => h('button', {
+      type: 'button', class: 'type-chip' + (e.id === engine.id ? ' on' : ''), style: { '--c': e.color }, onclick: () => switchEngine(e.id),
+    }, h('span', { class: 'type-dot' }, e.badge), e.label)));
+
     const envRow = h('div', { class: 'env-row' }, Object.entries(ENVS).map(([k, v]) => h('button', {
       type: 'button',
       class: 'env-chip' + (f.env === k ? ' on' : ''),
@@ -166,14 +179,84 @@
       onclick: (e) => { f.env = k; envRow.querySelectorAll('.env-chip').forEach((b) => b.classList.remove('on')); e.currentTarget.classList.add('on'); },
     }, h('span', { class: 'dot', style: { background: v.color } }), v.label)));
 
-    const basic = h('div', { class: 'grid2' },
-      field('Host', inp('host', { placeholder: 'db.example.com' })),
-      field('Port', inp('port', { type: 'number', placeholder: '1521' })),
-      field('Connect by', sel('serviceType', [['service', 'Service name'], ['sid', 'SID']])),
-      field('Service / SID', inp('service', { placeholder: 'ORCLPDB1' })));
-    const str = h('div', null, field('Connect string', inp('connectString', { placeholder: 'host:1521/service  or  (DESCRIPTION=…)' }), 'EZConnect or a full TNS descriptor.'));
+    const sslOptions = engine.id === 'clickhouse'
+      ? [['disable', 'Off (HTTP)'], ['require', 'HTTPS'], ['verify', 'HTTPS and verify certificate']]
+      : redis ? [['disable', 'Off'], ['require', 'TLS'], ['verify', 'TLS and verify certificate']]
+      : [['prefer', 'Prefer (SSL if the server has it)'], ['require', 'Require'], ['verify', 'Require and verify certificate'], ['disable', 'Off']];
+    // ClickHouse: HTTPS uses port 8443 unless another port was typed.
+    const sslChanged = () => {
+      if (engine.id !== 'clickhouse') return;
+      const tls = f.ssl !== 'disable';
+      if (tls && Number(f.port) === 8123) f.port = 8443;
+      if (!tls && Number(f.port) === 8443) f.port = 8123;
+      const portInput = form.querySelector('input[type=number]');
+      if (portInput) portInput.value = f.port;
+    };
+    const fileInput = fileBased ? inp('file', { placeholder: '/path/to/database.db', spellcheck: 'false' }) : null;
+    const fileBox = fileBased ? h('div', null,
+      field('Database file', h('div', { class: 'file-row' }, fileInput,
+        h('button', { type: 'button', class: 'btn', onclick: async () => {
+          try { const p = await api.pickSqliteFile(f.file); if (p) { f.file = p; fileInput.value = p; if (!f.name) { f.name = p.split(/[\\/]/).pop(); form.querySelector('input').value = f.name; } } } catch (e) { toast(e.message, 'err'); }
+        } }, 'Open file…'),
+        h('button', { type: 'button', class: 'btn', onclick: async () => {
+          try { const p = await api.newSqliteFile(); if (p) { f.file = p; fileInput.value = p; toast('Created ' + p, 'ok'); } } catch (e) { toast(e.message, 'err'); }
+        } }, 'New file…')),
+      'Lookup opens the file directly; nothing to install.'),
+      h('div', { class: 'checks-row' }, chk('readOnly', 'Open read-only (no changes can be saved)'))) : null;
+    let mongoBox = null;
+    let userPaint = null;
+    const basic = oracle
+      ? h('div', { class: 'grid2' },
+        field('Host', inp('host', { placeholder: 'db.example.com' })),
+        field('Port', inp('port', { type: 'number', placeholder: '1521' })),
+        field('Connect by', sel('serviceType', [['service', 'Service name'], ['sid', 'SID']])),
+        field('Service / SID', inp('service', { placeholder: 'ORCLPDB1' })))
+      : h('div', { class: 'grid2' },
+        field('Host', inp('host', { placeholder: 'db.example.com' })),
+        field('Port', inp('port', { type: 'number', placeholder: String(engine.port) })),
+        field(engine.id === 'clickhouse' ? 'Connection' : redis ? 'TLS' : 'SSL', sel('ssl', sslOptions, sslChanged)),
+        field('Database', redis ? inp('database', { type: 'number', min: '0', placeholder: '0' })
+          : inp('database', { placeholder: engine.id === 'postgres' ? 'postgres' : engine.id === 'clickhouse' ? 'default' : 'optional' })));
+    // MongoDB: hosts (a list for a replica set), SRV, login type, TLS, replica set, read preference.
+    if (mongo) {
+      const urlPrev = h('div', { class: 'form-urlprev', title: 'The connection string Lookup builds (the password is never put in it)' });
+      const paintUrl = () => {
+        const hosts = String(f.host || 'localhost').split(/[\s,]+/).filter(Boolean).map((x) => (f.srv || /:\d+$/.test(x) ? x : `${x}:${f.port || 27017}`));
+        const q = [f.authSource ? `authSource=${f.authSource}` : '', f.replicaSet ? `replicaSet=${f.replicaSet}` : '', f.readPreference && f.readPreference !== 'primary' ? `readPreference=${f.readPreference}` : '',
+          f.ssl !== 'disable' ? 'tls=true' : '', f.authMechanism && !['DEFAULT', 'NONE'].includes(f.authMechanism) ? `authMechanism=${f.authMechanism}` : ''].filter(Boolean).join('&');
+        urlPrev.textContent = `${f.srv ? 'mongodb+srv' : 'mongodb'}://${f.user && f.authMechanism !== 'NONE' ? encodeURIComponent(f.user) + '@' : ''}${hosts.join(',')}/${f.database || ''}${q ? '?' + q : ''}`;
+      };
+      const watch = (el) => { el.addEventListener('input', paintUrl); el.addEventListener('change', paintUrl); return el; };
+      const srvSel = h('select', { class: 'input', onchange: (e) => { f.srv = e.target.value === 'srv'; if (f.srv && f.ssl === 'disable') { f.ssl = 'verify'; tlsSel.value = 'verify'; } paintUrl(); } },
+        h('option', { value: 'std' }, 'Standard (host:port list)'), h('option', { value: 'srv' }, 'SRV record (mongodb+srv)'));
+      srvSel.value = f.srv ? 'srv' : 'std';
+      const tlsSel = watch(sel('ssl', [['disable', 'Off'], ['verify', 'On'], ['require', 'On, allow invalid certificates']]));
+      const authSel = watch(sel('authMechanism', [['DEFAULT', 'Username / password'], ['SCRAM-SHA-256', 'SCRAM-SHA-256'], ['SCRAM-SHA-1', 'SCRAM-SHA-1'], ['PLAIN', 'LDAP (PLAIN)'], ['MONGODB-X509', 'X.509 certificate'], ['MONGODB-AWS', 'AWS IAM'], ['NONE', 'None']], () => { x509Row.classList.toggle('hidden', f.authMechanism !== 'MONGODB-X509'); }));
+      const x509Row = h('div', { class: 'grid2' + (f.authMechanism === 'MONGODB-X509' ? '' : ' hidden') },
+        field('Client certificate and key (PEM file)', inp('tlsCertificateKeyFile', { placeholder: '/path/to/client.pem', spellcheck: 'false' })),
+        field('CA file (optional)', inp('tlsCAFile', { placeholder: '/path/to/ca.pem', spellcheck: 'false' })));
+      mongoBox = h('div', { class: 'm-form' },
+        h('div', { class: 'grid2' },
+          field('Hosts', watch(inp('host', { placeholder: 'db1.example.com, db2.example.com:27018', spellcheck: 'false' })), 'One host, or several (a replica set) separated by commas.'),
+          h('div', { class: 'grid2 tight' }, field('Port', watch(inp('port', { type: 'number', placeholder: '27017' }))), field('Connection', srvSel))),
+        h('div', { class: 'grid2' },
+          field('Default database', watch(inp('database', { placeholder: 'test', spellcheck: 'false' }))),
+          field('Read preference', watch(sel('readPreference', [['primary', 'Primary'], ['primaryPreferred', 'Primary preferred'], ['secondary', 'Secondary'], ['secondaryPreferred', 'Secondary preferred'], ['nearest', 'Nearest']])))),
+        h('div', { class: 'grid2' },
+          field('Authentication', authSel),
+          field('Auth database', watch(inp('authSource', { placeholder: 'admin', spellcheck: 'false' })))),
+        x509Row,
+        h('div', { class: 'grid2' }, field('TLS', tlsSel), field('Replica set', watch(inp('replicaSet', { placeholder: 'optional (found from the hosts)', spellcheck: 'false' })))),
+        urlPrev);
+      paintUrl();
+      userPaint = paintUrl;
+    }
+    const str = oracle
+      ? h('div', null, field('Connect string', inp('connectString', { placeholder: 'host:1521/service  or  (DESCRIPTION=…)' }), 'EZConnect or a full TNS descriptor.'))
+      : h('div', null, field('URL', inp('connectString', { placeholder: engine.id === 'postgres' ? 'postgres://user@host:5432/database?sslmode=require' : engine.id === 'clickhouse' ? 'https://host:8443' : redis ? 'redis://user@host:6379/0  or  rediss:// for TLS' : mongo ? 'mongodb+srv://cluster0.example.mongodb.net/mydb  or  mongodb://host:27017/mydb' : 'mysql://user@host:3306/database' }),
+        'User and password typed below are used instead of the ones in the URL.'));
     const modeBox = h('div');
-    const paintMode = () => { modeBox.innerHTML = ''; modeBox.append(f.mode === 'string' ? str : basic); };
+    const paintMode = () => { modeBox.innerHTML = ''; modeBox.append(fileBased ? fileBox : f.mode === 'string' ? str : mongo ? mongoBox : basic); };
     paintMode();
 
     const pw = inp('password', { type: 'password', placeholder: c.keepPassword && c.hasPassword ? '•••••••• (saved)' : '' });
@@ -194,7 +277,19 @@
     const pwBox = h('div', { class: 'pw-wrap' }, pw, eye);
 
     const status = h('div', { class: 'form-status' });
-    const collect = () => ({ ...f, port: Number(f.port) || 1521 });
+    const collect = () => {
+      if (fileBased) {
+        const { id, name, env, file, readOnly, autoCommit } = f;
+        return { id, name, env, engine: engine.id, file: String(file || '').trim(), readOnly: !!readOnly, autoCommit: !!autoCommit, savePassword: false, mode: 'basic' };
+      }
+      const out = { ...f, port: Number(f.port) || engine.port };
+      if (oracle) { delete out.database; delete out.ssl; } else { delete out.service; delete out.serviceType; delete out.role; }
+      if (noTx) out.autoCommit = true;
+      if (redis) { out.database = Math.max(0, Math.floor(Number(f.database) || 0)); out.readOnly = !!f.readOnly; }
+      else if (mongo) { out.readOnly = !!f.readOnly; out.srv = !!f.srv; out.host = String(f.host || '').trim(); }
+      else delete out.readOnly;
+      return out;
+    };
     const busy = (b) => form.querySelectorAll('button').forEach((x) => { x.disabled = b; });
 
     const doTest = async () => {
@@ -204,7 +299,8 @@
       try {
         const r = await api.testConnection(collect());
         status.className = 'form-status ok';
-        status.textContent = `Connected · Oracle ${r.version} · schema ${r.schema}`;
+        const where = mongo ? `${r.topology}${r.atlas ? ' (Atlas)' : ''} · database ${r.dbName}` : redis ? r.dbName : oracle ? `schema ${r.schema}` : engine.id === 'postgres' ? `database ${r.dbName} · schema ${r.schema}` : fileBased ? r.dbName : r.dbName ? `database ${r.dbName}` : 'no default database';
+        status.textContent = `Connected · ${r.product || engine.label} ${r.version} · ${where}`;
       } catch (e) {
         status.className = 'form-status err';
         status.textContent = e.message;
@@ -212,44 +308,56 @@
     };
     const doSave = async () => {
       const cfg = collect();
-      if (!cfg.name) cfg.name = cfg.mode === 'string' ? cfg.user : `${cfg.user}@${cfg.host}`;
+      if (fileBased && !cfg.file) { status.className = 'form-status err'; status.textContent = 'Choose a database file (Open file… or New file…).'; throw new Error('No file'); }
+      if (!cfg.name) cfg.name = fileBased ? cfg.file.split(/[\\/]/).pop() : cfg.mode === 'string' ? cfg.user || engine.label : `${cfg.user || (redis ? 'default' : '')}@${cfg.host}`;
       const id = await api.saveConnection(cfg);
-      f.id = id; // later saves update this connection
       S.connections = await api.listConnections();
-      if (onSaved) onSaved(id);
+      S.selectedConn = { ...S.connections.find((x) => x.id === id), keepPassword: true, password: '' };
       renderWelcome();
       Lookup.renderStatus();
       toast('Connection saved', 'ok');
       return id;
     };
     const doConnect = async () => {
-      const id = await doSave();
-      if (onConnect) onConnect(id); else connectTo(id);
+      let id;
+      try { id = await doSave(); } catch { return; }
+      connectTo(id);
     };
 
     const form = h('form', { class: 'conn-form', onsubmit: (e) => { e.preventDefault(); doConnect(); } },
       h('div', { class: 'form-head' },
-        h('div', { class: 'seg' },
+        h('h2', null, c.id ? 'Edit connection' : 'New connection'),
+        h('div', { class: 'spacer' }),
+        fileBased ? null : h('div', { class: 'seg' },
           ['basic', 'string'].map((m) => h('button', {
             type: 'button', class: f.mode === m ? 'on' : '',
             onclick: (e) => { f.mode = m; e.currentTarget.parentNode.querySelectorAll('button').forEach((b) => b.classList.remove('on')); e.currentTarget.classList.add('on'); paintMode(); },
-          }, m === 'basic' ? 'Basic' : 'Connect string')))),
+          }, m === 'basic' ? (oracle ? 'Basic' : 'Fields') : (oracle ? 'Connect string' : 'URL')))),
+        h('button', { type: 'button', class: 'icon-btn form-close', title: 'Close (back to the start screen)', onclick: () => { S.selectedConn = null; renderWelcome(); } }, icon('x'))),
+      field('Type', typeRow),
       field('Name', inp('name', { placeholder: 'e.g. Billing — staging' })),
       field('Tag', envRow),
       modeBox,
-      h('div', { class: 'grid2' },
-        field('User', inp('user', { placeholder: 'HR', autocomplete: 'off' })),
+      fileBased ? null : h('div', { class: 'grid2' },
+        field('User', inp('user', { placeholder: oracle ? 'HR' : engine.id === 'postgres' ? 'postgres' : engine.id === 'clickhouse' || redis ? 'default' : mongo ? 'optional' : 'root', autocomplete: 'off' })),
         field('Password', pwBox)),
-      h('div', { class: 'grid2' },
-        field('Role', sel('role', [['DEFAULT', 'Default'], ['SYSDBA', 'SYSDBA'], ['SYSOPER', 'SYSOPER'], ['SYSBACKUP', 'SYSBACKUP']])),
-        h('div', { class: 'field checks' }, chk('savePassword', 'Save password (encrypted)'), chk('autoCommit', 'Auto-commit by default'))),
+      oracle
+        ? h('div', { class: 'grid2' },
+          field('Role', sel('role', [['DEFAULT', 'Default'], ['SYSDBA', 'SYSDBA'], ['SYSOPER', 'SYSOPER'], ['SYSBACKUP', 'SYSBACKUP']])),
+          h('div', { class: 'field checks' }, chk('savePassword', 'Save password (encrypted)'), chk('autoCommit', 'Auto-commit by default')))
+        : h('div', { class: 'checks-row' },
+          fileBased ? null : chk('savePassword', 'Save password (encrypted)'),
+          redis ? chk('readOnly', 'Read-only (block write commands)')
+            : mongo ? chk('readOnly', 'Read-only (block changes)')
+            : noTx ? h('span', { class: 'muted' }, 'ClickHouse has no transactions: every statement is applied at once.') : chk('autoCommit', 'Auto-commit by default')),
       status,
       h('div', { class: 'form-actions' },
-        c.id ? h('button', { type: 'button', class: 'btn ghost danger-text', onclick: async () => { if (await deleteConn(c) && onDeleted) onDeleted(); } }, icon('trash'), 'Delete') : null,
+        c.id ? h('button', { type: 'button', class: 'btn ghost danger-text', onclick: () => deleteConn(c) }, icon('trash'), 'Delete') : null,
         h('div', { class: 'spacer' }),
         h('button', { type: 'button', class: 'btn', onclick: doTest }, 'Test'),
-        h('button', { type: 'button', class: 'btn', onclick: doSave }, 'Save'),
+        h('button', { type: 'button', class: 'btn', onclick: () => doSave().catch(() => {}) }, 'Save'),
         h('button', { type: 'submit', class: 'btn primary' }, 'Connect')));
+    if (userPaint) form.addEventListener('input', () => userPaint()); // MongoDB: keep the connection string preview current
     return form;
   }
   // ---------- Connect / workspace ----------
@@ -278,7 +386,8 @@
     S.connecting = id;
     Lookup.pushState();
     let password;
-    if (c && !c.hasPassword) {
+    const optional = Lookup.engineOf(c).passwordOptional && !c.user; // Redis: many servers have no password
+    if (c && !c.hasPassword && !Lookup.engineOf(c).file && !optional) {
       password = await askPassword(c);
       if (password === null) { S.connecting = null; Lookup.pushState(); return; }
     }
@@ -289,12 +398,23 @@
     const onEsc = (e) => { if (e.key === 'Escape' && !cancelled) { e.preventDefault(); cancelBtn.click(); } };
     document.addEventListener('keydown', onEsc, true);
     try {
-      S.info = await api.connect(id, password);
+      try {
+        S.info = await api.connect(id, password);
+      } catch (e) {
+        // No password saved and the server asks for one: ask, then try again.
+        if (!optional || cancelled || !/NOAUTH|Authentication required|WRONGPASS|Wrong username or password/i.test(e.message)) throw e;
+        overlay.classList.add('hidden');
+        password = await askPassword({ ...c, user: c.user || 'default' });
+        if (password === null) throw Object.assign(new Error('Connection cancelled'), { cancelled: true });
+        overlay.classList.remove('hidden');
+        S.info = await api.connect(id, password);
+      }
       S.connecting = null;
       S.current = c;
       S.autoCommit = S.info.autoCommit;
       S.txPending = false;
       S.schema = S.info.schema;
+      S.collapsed = new Set(Lookup.profile().collapsed || []);
       S.objCache.clear();
       S.colCache.clear();
       overlay.remove();

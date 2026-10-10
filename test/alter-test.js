@@ -1,6 +1,6 @@
 // ALTER TABLE plans from the Structure tab. Run with: npm test
 const assert = require('assert');
-const { buildAlterTable } = require('../src/main/sqlgen');
+const { buildAlterTable } = require('../src/main/db/oracle/sqlgen');
 
 let passed = 0;
 const t = (name, fn) => { fn(); passed++; console.log('  ok  ' + name); };

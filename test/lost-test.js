@@ -4,6 +4,7 @@ const assert = require('assert');
 const net = require('net');
 const oracledb = require('oracledb');
 const db = require('../src/main/db');
+const oracle = require('../src/main/db/oracle');
 
 let passed = 0;
 const t = async (name, fn) => { await fn(); passed++; console.log('  ok ', name); };
@@ -29,20 +30,20 @@ function fakeConn(behaviour = {}) {
 const keepAlive = setInterval(() => {}, 1000); // the module's timers are unref'd; keep the test process running
 (async () => {
   await t('connect options: 60 s connect timeout and keep-alive by default', () => {
-    const o = db.connectOptions({ user: 'u', password: 'p', host: 'h', service: 's' });
+    const o = oracle.connectOptions({ user: 'u', password: 'p', host: 'h', service: 's' });
     assert.deepStrictEqual([o.connectTimeout, o.transportConnectTimeout], [60, 60]);
     assert.match(o.connectString, /^\(DESCRIPTION=\(EXPIRE_TIME=1\)/);
   });
 
   await t('settings in seconds: connect timeout, keep-alive (in the descriptor), Easy Connect rounds to minutes, 0 = off', () => {
     db.configure({ connectTimeoutSec: 15, keepAliveSec: 20 });
-    let o = db.connectOptions({ user: 'u', password: 'p', host: 'h', service: 's' });
+    let o = oracle.connectOptions({ user: 'u', password: 'p', host: 'h', service: 's' });
     assert.strictEqual(o.connectTimeout, 15);
     assert.match(o.connectString, /EXPIRE_TIME=0\.3333/);
-    o = db.connectOptions({ user: 'u', password: 'p', mode: 'string', connectString: 'h:1521/s' });
+    o = oracle.connectOptions({ user: 'u', password: 'p', mode: 'string', connectString: 'h:1521/s' });
     assert.strictEqual(o.expireTime, 1);
     db.configure({ keepAliveSec: 0 });
-    o = db.connectOptions({ user: 'u', password: 'p', host: 'h', service: 's' });
+    o = oracle.connectOptions({ user: 'u', password: 'p', host: 'h', service: 's' });
     assert.ok(!/EXPIRE_TIME/.test(o.connectString) && o.expireTime === undefined);
     assert.deepStrictEqual(db.configure({ connectTimeoutSec: 0, healthCheckSec: -5 }), { connectTimeoutSec: 1, keepAliveSec: 0, healthCheckSec: 0 });
     db.configure({ connectTimeoutSec: 60, keepAliveSec: 60, healthCheckSec: 30 });

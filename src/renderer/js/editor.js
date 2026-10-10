@@ -57,6 +57,7 @@
       this.onRunAll = onRunAll;
       this.onSave = onSave;
       this.completions = completions;
+      this.opts = arguments[0] || {};
       this.gutter = h('div', { class: 'ed-gutter' });
       this.pre = h('pre', { class: 'ed-hl', 'aria-hidden': 'true' });
       this.ta = h('textarea', { class: 'ed-input', spellcheck: 'false', wrap: 'off', autocapitalize: 'off', autocomplete: 'off' });
@@ -141,7 +142,7 @@
     }
 
     currentStatement() {
-      return window.SqlSplit.statementAt(this.ta.value, this.ta.selectionStart);
+      return window.SqlSplit.statementAt(this.ta.value, this.ta.selectionStart, this.opts.dialect ? this.opts.dialect() : undefined);
     }
 
     markStatement() {

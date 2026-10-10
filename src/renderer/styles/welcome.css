@@ -1,55 +1,31 @@
-/* Home screen, the connection form dialog, and the import preview. */
+/* Welcome screen: saved connections and the connection form. */
 
-/* ---------- Home: app info and actions on the left, connections on the right ---------- */
+/* ---------- Welcome ---------- */
 .welcome { flex: 1; display: flex; min-height: 0; }
-.home-left {
-  width: 300px; flex: 0 0 300px; display: flex; flex-direction: column; justify-content: space-between;
-  padding: 56px 22px 24px; background: var(--side); border-right: 1px solid var(--border);
+.welcome-left {
+  width: 340px; flex: 0 0 340px; display: flex; flex-direction: column; gap: 10px;
+  padding: 22px 16px 16px; background: var(--side); border-right: 1px solid var(--border);
 }
-.home-brand { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; }
-.home-logo { width: 116px; height: 116px; margin-bottom: 10px; background: url('../assets/app-icon.svg') center / contain no-repeat; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .18)); }
-.home-brand h1 { margin: 0; font-size: 30px; font-weight: 750; letter-spacing: -0.02em; }
-.home-brand .muted { font-size: 12.5px; }
-.home-actions { display: flex; flex-direction: column; gap: 10px; }
-.home-btn {
-  display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 18px; width: 100%;
-  border: 1px solid var(--border-strong); border-radius: 23px; background: var(--raised); color: var(--text);
-  font: inherit; font-size: 13.5px; font-weight: 500; text-align: left; cursor: default;
+.welcome-head { display: flex; align-items: flex-start; justify-content: space-between; padding: 0 4px 4px; }
+.welcome-head h1 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
+.welcome-head p { margin: 2px 0 0; font-size: 12px; }
+.conn-list { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 2px; margin: 0 -4px; padding: 0 4px; }
+.conn-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 9px; }
+.conn-item:hover { background: var(--hover); }
+.conn-item.sel { background: var(--raised); box-shadow: 0 0 0 1px var(--border), 0 1px 3px rgba(0,0,0,.06); }
+.conn-badge {
+  width: 34px; height: 34px; flex: 0 0 34px; border-radius: 9px; display: grid; place-items: center;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--c); background: color-mix(in srgb, var(--c) 15%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 30%, transparent);
 }
-.home-btn:hover:not(:disabled) { background: var(--hover); }
-.home-btn:disabled { opacity: .45; }
-.home-btn .ic, .home-btn .ic svg { width: 18px; height: 18px; color: var(--muted); }
-.home-right { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
-.home-top { display: flex; align-items: center; gap: 8px; padding: 20px 24px 12px; }
-.home-add .ic, .home-add .ic svg { width: 18px; height: 18px; }
-.home-search {
-  flex: 1; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px;
-  border: 1px solid var(--border-strong); border-radius: 19px; background: var(--raised);
-}
-.home-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.home-search .ic { color: var(--muted); }
-.home-search-input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; font-size: 13.5px; user-select: text; }
-.home-list { flex: 1; overflow: auto; padding: 4px 16px 24px 24px; }
-.home-conn { display: flex; align-items: center; gap: 14px; padding: 8px 10px; margin-bottom: 2px; border-radius: 10px; cursor: default; }
-.home-conn:hover { background: var(--hover); }
-.home-conn.sel { background: var(--active); }
-.home-badge {
-  width: 40px; height: 40px; flex: 0 0 40px; border-radius: 50%; display: grid; place-items: center;
-  font-size: 14px; font-weight: 600; color: #fff; background: var(--c);
-}
-.home-conn-text { min-width: 0; }
-.home-conn-name { display: flex; align-items: baseline; gap: 6px; font-size: 14.5px; font-weight: 500; white-space: nowrap; }
-.home-conn-name > span:first-child { overflow: hidden; text-overflow: ellipsis; }
-.home-conn-env { font-weight: 500; }
-.home-conn-sub { margin-top: 2px; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.home-empty { padding: 60px 10px; text-align: center; color: var(--muted); }
-.home-empty-actions { display: flex; justify-content: center; gap: 8px; margin-top: 14px; }
-
-/* The connection form, shown in a dialog */
-.modal.conn-dialog { width: 620px; max-height: 88vh; }
-.conn-dialog .modal-body { padding-bottom: 16px; }
-.conn-form { width: 100%; display: flex; flex-direction: column; gap: 14px; }
-.form-head { display: flex; align-items: center; justify-content: flex-start; }
+.conn-item-text { min-width: 0; }
+.conn-item-name { font-weight: 600; display: flex; align-items: center; white-space: nowrap; }
+.conn-item-sub { color: var(--muted); font-size: 11.5px; font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.welcome-right { flex: 1; overflow: auto; display: flex; justify-content: center; padding: 34px 28px; }
+.conn-form { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 14px; }
+.form-head { display: flex; align-items: center; justify-content: space-between; }
+.form-head h2 { margin: 0; font-size: 17px; font-weight: 650; }
 .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .field-label { font-size: 11.5px; font-weight: 600; color: var(--muted); }
 .field-hint { font-size: 11.5px; color: var(--faint); }
@@ -77,7 +53,9 @@
   width: 26px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); }
 .pw-eye:hover { background: var(--hover); color: var(--text); }
 
-/* Import preview */
+/* Import / export buttons next to New, and the import preview */
+.welcome-actions { display: flex; align-items: center; gap: 2px; }
+.welcome-actions .btn { margin-left: 6px; }
 .imp-note { margin: 0 0 10px; font-size: 12px; }
 .imp-list { max-height: 50vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
 .imp-row input { accent-color: var(--accent); }
@@ -101,3 +79,52 @@
 .cx-status { min-height: 0; color: var(--err); font-size: 12px; }
 .cx-status:empty { display: none; }
 .cx-box { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; }
+
+/* Start screen on the right before a connection is picked: logo + shortcuts */
+.welcome-right.welcome-empty { position: relative; padding: 0; }
+.home-intro .empty-mark { width: 88px; height: 88px; }
+.home-intro h2 { font-size: 20px; font-weight: 700; }
+.home-intro .shortcuts { grid-template-columns: auto auto; column-gap: 34px; row-gap: 10px; }
+.home-intro .shortcuts span { margin-left: 10px; }
+.form-head .spacer { flex: 1; }
+.form-close { margin-left: 8px; }
+
+/* Engine badges (Oc / Pg / My) on the connections list and in the form's Type row */
+.conn-badge.engine { color: #fff; background: var(--c); box-shadow: none; font-size: 12.5px; }
+.type-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.type-chip {
+  display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 12px 0 4px;
+  border-radius: 14px; border: 1px solid var(--border-strong); background: var(--raised); font-size: 12.5px; color: var(--text);
+}
+.type-chip.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 12%, var(--raised)); font-weight: 600; }
+.type-dot {
+  width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--c); color: #fff; font-size: 9.5px; font-weight: 700;
+}
+
+/* New connection: choose the database first */
+.choose { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 14px; }
+.choose h2 { margin: 0; font-size: 17px; font-weight: 650; }
+.choose-sub { margin: -8px 0 4px; font-size: 13px; }
+.choose-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.choose-card {
+  display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 22px 14px 18px;
+  border: 1px solid var(--border-strong); border-radius: 12px; background: var(--raised); color: var(--text); text-align: center;
+}
+.choose-card:hover { border-color: color-mix(in srgb, var(--c) 60%, var(--border-strong)); }
+.choose-card.on { border-color: var(--c); box-shadow: 0 0 0 1px var(--c); }
+.choose-card:focus-visible { outline: 2px solid var(--c); outline-offset: 2px; }
+.choose-logo {
+  width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--c); color: #fff; font-size: 18px; font-weight: 700;
+}
+.choose-name { font-size: 14px; font-weight: 650; }
+.choose-blurb { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+.choose-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border); }
+.checks-row { display: flex; gap: 22px; align-items: center; }
+.file-row { display: flex; gap: 6px; }
+.file-row .input { flex: 1; min-width: 0; font-family: var(--mono); font-size: 12px; }
+
+/* MongoDB form: the connection string being built, Port + Connection side by side */
+.form-urlprev { font: 11.5px/16px var(--mono); color: var(--muted); background: var(--hover); border-radius: 6px; padding: 6px 9px; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: text; }
+.grid2.tight { gap: 8px; grid-template-columns: 90px 1fr; }

@@ -38,7 +38,30 @@
   /** One SQL Developer connection -> a Lookup connection, or { skip: reason }. */
   function toLookup({ name, info }) {
     const type = info.RaptorConnectionType || info.type;
-    if (type && !/^oracle$/i.test(type)) return { name, skip: `${type} connection (only Oracle is supported)` };
+    // PostgreSQL / MySQL connections written by Lookup (LookupEngine), and SQL Developer's own MySQL ones.
+    const engine = info.LookupEngine || (/^mysql$/i.test(type || '') ? 'mysql' : null);
+    if (engine === 'sqlite') {
+      if (!info.LookupFile) return { name, skip: 'no database file' };
+      return { engine, name: name || info.ConnName || '', env: ENVS[info.LookupEnv] ? info.LookupEnv : 'none', file: info.LookupFile, readOnly: isTrue(info.LookupReadOnly), autoCommit: false, savePassword: false, mode: 'basic' };
+    }
+    if (engine === 'postgres' || engine === 'mysql' || engine === 'clickhouse' || engine === 'redis' || engine === 'mongodb') {
+      if (!info.hostname && !info.LookupUrl) return { name, skip: 'no host' };
+      const c = {
+        engine, name: name || info.ConnName || '', env: ENVS[info.LookupEnv] ? info.LookupEnv : 'none', user: info.user || '', autoCommit: false,
+        ssl: info.LookupSsl || (engine === 'redis' || engine === 'clickhouse' ? 'disable' : 'prefer'), database: info.LookupDatabase || info.database || '',
+      };
+      if (engine === 'redis') { c.autoCommit = true; c.database = Number(c.database) || 0; c.readOnly = isTrue(info.LookupReadOnly); }
+      if (engine === 'mongodb') {
+        c.autoCommit = true;
+        c.readOnly = isTrue(info.LookupReadOnly);
+        // MongoDB's own settings travel as one JSON field.
+        try { Object.assign(c, JSON.parse(info.LookupMongo || '{}')); } catch { /* ignore a broken field */ }
+      }
+      if (info.LookupPassword) c.sealedPassword = info.LookupPassword;
+      if (info.LookupUrl) return { ...c, mode: 'string', connectString: info.LookupUrl };
+      return { ...c, mode: 'basic', host: info.hostname, port: Number(info.port) || Lookup.ENGINES[engine].port };
+    }
+    if (type && !/^oracle$/i.test(type)) return { name, skip: `${type} connection (Lookup supports Oracle, PostgreSQL and MySQL)` };
     if (isTrue(info.OS_AUTHENTICATION)) return { name, skip: 'uses OS authentication' };
     if (isTrue(info.KERBEROS_AUTHENTICATION)) return { name, skip: 'uses Kerberos' };
     const base = {
@@ -63,18 +86,25 @@
 
   // Same rule as the main process: one login on one database.
   function loginKey(c) {
+    if (c.engine === 'sqlite') return `sqlite|${c.file}`;
+    if (c.engine && c.engine !== 'oracle') {
+      return `${c.engine}|${c.mode === 'string' ? c.connectString : `${String(c.host || '').toLowerCase()}:${c.port}/${c.database || ''}`}|${c.user || ''}`;
+    }
     const target = c.mode === 'string'
       ? String(c.connectString || '').replace(/\s+/g, '').toLowerCase()
       : `${String(c.host || 'localhost').toLowerCase()}:${c.port || 1521}/${String(c.service || '').toLowerCase()}/${c.serviceType || 'service'}`;
     return `${target}|${String(c.user || '').toUpperCase()}|${c.role || 'DEFAULT'}`;
   }
-  const describe = (c) => (c.mode === 'string' ? `${c.user} · ${c.connectString}` : `${c.user}@${c.host}:${c.port}/${c.service}${c.serviceType === 'sid' ? ' (SID)' : ''}`);
+  const describe = (c) => {
+    if (c.engine && c.engine !== 'oracle') return `${Lookup.ENGINES[c.engine].label} · ${c.mode === 'string' && !Lookup.ENGINES[c.engine].file ? c.connectString : Lookup.target(c)}`;
+    return c.mode === 'string' ? `${c.user} · ${c.connectString}` : `${c.user}@${c.host}:${c.port}/${c.service}${c.serviceType === 'sid' ? ' (SID)' : ''}`;
+  };
 
   // ---------- writing ----------
   const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
   function toSqlDevXml(conns, sealed = {}) {
     const ref = (c) => {
-      const f = [
+      const f = c.engine && c.engine !== 'oracle' ? otherFields(c, sealed) : [
         ['ConnName', c.name || c.user],
         ['RaptorConnectionType', 'Oracle'], ['subtype', 'oraJDBC'], ['oraDriverType', 'thin'], ['driver', 'oracle.jdbc.OracleDriver'],
         ['user', c.user || ''],
@@ -92,6 +122,28 @@
         + '      </RefAddresses>\n   </Reference>\n';
     };
     return `<?xml version = '1.0' encoding = 'UTF-8'?>\n<References xmlns="http://xmlns.oracle.com/adf/jndi">\n${conns.map(ref).join('')}</References>\n`;
+  }
+
+  // PostgreSQL / MySQL: SQL Developer can't open these; the Lookup* fields carry them to another Lookup.
+  function otherFields(c, sealed) {
+    if (c.engine === 'sqlite') {
+      return [['ConnName', c.name || 'SQLite'], ['RaptorConnectionType', 'SQLite'], ['LookupEngine', 'sqlite'], ['LookupFile', c.file || ''],
+        ...(c.readOnly ? [['LookupReadOnly', 'true']] : []),
+      ...(c.engine === 'mongodb' ? [['LookupMongo', JSON.stringify({ srv: !!c.srv, authMechanism: c.authMechanism || 'DEFAULT', authSource: c.authSource || '', replicaSet: c.replicaSet || '', readPreference: c.readPreference || 'primary', tlsCAFile: c.tlsCAFile || '', tlsCertificateKeyFile: c.tlsCertificateKeyFile || '' })]] : []), ...(c.env && c.env !== 'none' ? [['LookupEnv', c.env]] : [])];
+    }
+    return [
+      ['ConnName', c.name || c.user],
+      ['RaptorConnectionType', Lookup.ENGINES[c.engine].label],
+      ['LookupEngine', c.engine],
+      ['user', c.user || ''],
+      ...(c.mode === 'string' ? [['LookupUrl', c.connectString || '']] : [['hostname', c.host || 'localhost'], ['port', String(c.port || Lookup.ENGINES[c.engine].port)]]),
+      ...(c.database ? [['LookupDatabase', String(c.database)]] : []),
+      ...(c.ssl ? [['LookupSsl', c.ssl]] : []),
+      ...(c.readOnly ? [['LookupReadOnly', 'true']] : []),
+      ['SavePassword', 'false'],
+      ...(c.env && c.env !== 'none' ? [['LookupEnv', c.env]] : []),
+      ...(sealed[c.id] ? [['LookupPassword', sealed[c.id]]] : []),
+    ];
   }
 
   // ---------- UI ----------
@@ -195,7 +247,8 @@
       body: h('div', { class: 'cx-body' },
         h('label', { class: 'check' }, include, h('span', null, anyPw ? 'Include passwords' : 'Include passwords (no saved passwords)')),
         pwRow,
-        h('p', { class: 'muted cx-note' }, 'Saved as Oracle SQL Developer XML. Passwords are encrypted with this password; Lookup asks for it on import. SQL Developer imports the connections without passwords.'),
+        h('p', { class: 'muted cx-note' }, 'Saved as Oracle SQL Developer XML. Passwords are encrypted with this password; Lookup asks for it on import. SQL Developer imports the connections without passwords.'
+          + (conns.some((c) => c.engine && c.engine !== 'oracle') ? ' PostgreSQL, MySQL, SQLite, ClickHouse, Redis and MongoDB connections are included for Lookup; SQL Developer can\'t open them.' : '')),
         status),
       actions: [{ label: 'Cancel' }, {
         label: 'Save…', kind: 'primary',

@@ -91,6 +91,7 @@
       onSave: () => Lookup.commitShortcut(),
       onSaveFile: () => saveSqlFile(tab),
       onFormat: () => beautify(tab),
+      dialect: () => Lookup.dialect(), // how statements are split (Oracle / PostgreSQL / MySQL)
       completions,
     });
     const edHost = h('div', { class: 'ed-host' }, tab.editor.el);
@@ -129,7 +130,7 @@
     const src = ta.value.slice(a, b);
     if (!src.trim()) return;
     try {
-      const r = await api.formatSql(src);
+      const r = await api.formatSql(src, S.current && S.current.engine);
       if (r.text !== src) {
         ta.focus();
         ta.setSelectionRange(a, b);
@@ -152,10 +153,10 @@
     let stmts;
     const selText = ed.selection();
     if (mode === 'all') {
-      stmts = window.SqlSplit.split(ed.value).map((s) => ({ ...s, base: 0 }));
+      stmts = window.SqlSplit.split(ed.value, Lookup.dialect()).map((s) => ({ ...s, base: 0 }));
     } else if (selText) {
       const base = ed.ta.selectionStart;
-      stmts = window.SqlSplit.split(selText).map((s) => ({ ...s, base }));
+      stmts = window.SqlSplit.split(selText, Lookup.dialect()).map((s) => ({ ...s, base }));
     } else {
       const st = ed.currentStatement();
       stmts = st ? [{ ...st, base: 0 }] : [];
@@ -163,9 +164,11 @@
     if (!stmts.length) { toast('Nothing to run', 'info'); return; }
     if (mode === 'explain') {
       const st = stmts[0];
+      // Oracle: EXPLAIN PLAN FOR + DBMS_XPLAN; PostgreSQL / MySQL: EXPLAIN returns the plan as rows.
+      const [first, ...rest] = Lookup.profile().explain || ['EXPLAIN {sql}'];
       stmts = [
-        { ...st, text: 'EXPLAIN PLAN FOR ' + st.text, explainOf: st },
-        { text: "SELECT plan_table_output AS \"Plan\" FROM TABLE(DBMS_XPLAN.DISPLAY(NULL, NULL, 'TYPICAL'))", base: 0, start: st.start },
+        { ...st, text: Lookup.fill(first, { sql: st.text }), explainOf: st },
+        ...rest.map((text) => ({ text, base: 0, start: st.start })),
       ];
     }
     if (S.current && S.current.env === 'prod' && stmts.some((s) => /^\s*(delete|update|insert|merge|drop|truncate|alter)\b/i.test(s.text))) {
@@ -191,15 +194,19 @@
       stopBtn.disabled = false;
       stopBtn.lastChild.textContent = 'Stop';
       stopBtn.classList.add('hidden');
-      // The server confirmed the cancel (ORA-01013): show it as a plain message, not an error.
-      results = results.map((r) => (r.kind === 'error' && (/ORA-01013/.test(r.message) || (stopped && r.lost))
+      // The server confirmed the cancel (the engine marks it): show it as a plain message, not an error.
+      results = results.map((r) => (r.kind === 'error' && (r.cancelled || (stopped && r.lost))
         ? { ...r, kind: 'cancelled', message: r.lost ? r.message : 'Query cancelled' } : r));
     }
     if (mode === 'explain') results = results.filter((r) => !(r.kind === 'exec' && /^EXPLAIN/i.test(r.sql)));
     const total = Date.now() - t0;
-    if (S.current) api.addHistory(S.current.id, stmts.map((s) => s.text + (s.plsql ? '\n/' : ';')).join('\n')).catch(() => {});
-    if (!S.autoCommit && results.some((r) => r.kind === 'exec' && /^\s*(insert|update|delete|merge|begin|declare|call)\b/i.test(r.sql))) {
-      S.txPending = true;
+    if (S.current) api.addHistory(S.current.id, stmts.map((s) => s.text + (s.plsql && Lookup.dialect() === 'oracle' ? '\n/' : ';')).join('\n')).catch(() => {});
+    // PostgreSQL / MySQL report whether a transaction is open; for Oracle it is worked out from the statements.
+    const reported = [...results].reverse().find((r) => typeof r.txOpen === 'boolean');
+    const txNow = reported ? reported.txOpen
+      : S.txPending || results.some((r) => r.kind === 'exec' && /^\s*(insert|update|delete|merge|begin|declare|call)\b/i.test(r.sql));
+    if (!S.autoCommit && txNow !== S.txPending) {
+      S.txPending = txNow;
       Lookup.renderTitlebar();
       Lookup.renderStatus();
     }
@@ -232,6 +239,7 @@
     tab.parts.resFoot.innerHTML = '';
     tab.el.classList.add('no-results');
     tab.editor.focus();
+    Lookup.trimSoon();
   }
   function paintResults(tab) {
     const { resTabs, resBody, resFoot } = tab.parts;

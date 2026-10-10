@@ -37,7 +37,7 @@
       const s = await api.structure(tab.owner, tab.name);
       tab.structLoaded = true;
       el.innerHTML = '';
-      if (tab.type === 'TABLE' && window.structureEditor) {
+      if (tab.type === 'TABLE' && window.structureEditor && Lookup.feature('alterTable')) {
         // Editable: pending bar + editor.
         const count = h('span', { class: 'changes-count' });
         const bar = h('div', { class: 'se-bar hidden' },
@@ -70,7 +70,7 @@
           h('td', { class: 'mono strong' }, c.pk ? icon('key', 'pk') : null, c.name),
           h('td', { class: 'mono type' }, c.fullType),
           h('td', null, c.nullable ? h('span', { class: 'muted' }, 'yes') : h('span', { class: 'tagx' }, 'NOT NULL')),
-          h('td', { class: 'mono muted' }, c.identity ? `IDENTITY · ${String(c.identity).toLowerCase()}` : c.default ?? ''),
+          h('td', { class: 'mono muted' }, c.identity === 'AUTO_INCREMENT' ? 'auto_increment' : c.identity ? `IDENTITY · ${String(c.identity).toLowerCase()}` : c.default ?? ''),
           h('td', { class: 'muted' }, c.comments || '')))));
       el.append(h('h3', null, 'Constraints', h('span', { class: 'count' }, s.constraints.length)),
         s.constraints.length ? tbl(['Name', 'Type', 'Columns', 'Detail', 'Status'], s.constraints.map((c) => h('tr', null,
@@ -142,7 +142,7 @@
   const PLSQL_TYPES = ['PACKAGE', 'PROCEDURE', 'FUNCTION', 'TRIGGER', 'TYPE'];
   // DDL viewer with options (tables/views), copy, save as .sql and open in editor.
   function ddlViewer(owner, name, type) {
-    const tabular = ['TABLE', 'VIEW', 'MATERIALIZED VIEW'].includes(type);
+    const tabular = ['TABLE', 'VIEW', 'MATERIALIZED VIEW', 'DICTIONARY'].includes(type);
     const plsql = PLSQL_TYPES.includes(type);
     let text = '';
     const pre = h('pre', { class: 'ddl-code' });
@@ -153,16 +153,22 @@
       input.checked = DDL_OPTS[key];
       return h('label', { class: 'check sm' }, input, h('span', null, label));
     };
+    // Oracle has every option; PostgreSQL builds tables from the catalog (indexes, comments, triggers);
+    // MySQL's SHOW CREATE only allows the schema prefix on tables.
+    const engine = Lookup.engineId();
+    const full = engine === 'oracle';
+    const pg = engine === 'postgres';
+    const lite = engine === 'sqlite'; // indexes and triggers of a table; ClickHouse: SHOW CREATE only
     const options = h('div', { class: 'ddl-opts' },
-      opt('indexes', 'Indexes', tabular && type !== 'VIEW'),
-      opt('comments', 'Comments', tabular),
-      opt('triggers', 'Triggers', tabular),
-      opt('grants', 'Grants'),
-      opt('storage', 'Storage & tablespace', type === 'TABLE' || type === 'MATERIALIZED VIEW'),
-      opt('schema', 'Schema prefix'));
+      opt('indexes', 'Indexes', (full || pg || lite) && tabular && type !== 'VIEW'),
+      opt('comments', 'Comments', (full || pg) && tabular),
+      opt('triggers', 'Triggers', (full && tabular) || ((pg || lite) && type === 'TABLE')),
+      opt('grants', 'Grants', full),
+      opt('storage', 'Storage & tablespace', full && (type === 'TABLE' || type === 'MATERIALIZED VIEW')),
+      opt('schema', 'Schema prefix', full || pg || (engine === 'mysql' && type === 'TABLE')));
     const scriptText = () => {
       let t = text.trim();
-      if (plsql && !/\n\/\s*$/.test(t)) t += '\n/';
+      if (full && plsql && !/\n\/\s*$/.test(t)) t += '\n/';
       return t + '\n';
     };
     const load = async () => {

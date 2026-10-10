@@ -26,8 +26,8 @@
     const dataTools = h('div', { class: 'tools' },
       h('button', { class: 'tool', title: 'Filter (Ctrl+F)', onclick: () => tab.toggleFilter() }, icon('filter'), h('span', { class: 'filter-n' })),
       h('button', { class: 'tool', title: 'Refresh (F5)', onclick: () => tab.reload() }, icon('refresh')),
-      type === 'TABLE' ? h('button', { class: 'tool', title: 'Add row', onclick: () => tab.grid && tab.grid.addRow() }, icon('plus')) : null,
-      type === 'TABLE' ? h('button', { class: 'tool', title: 'Delete selected rows (Del)', onclick: () => tab.grid && tab.grid.deleteRows(tab.grid.selectedVisualRows()) }, icon('trash')) : null,
+      type === 'TABLE' && Lookup.feature('editRows') ? h('button', { class: 'tool', title: 'Add row', onclick: () => tab.grid && tab.grid.addRow() }, icon('plus')) : null,
+      type === 'TABLE' && Lookup.feature('editRows') ? h('button', { class: 'tool', title: 'Delete selected rows (Del)', onclick: () => tab.grid && tab.grid.deleteRows(tab.grid.selectedVisualRows()) }, icon('trash')) : null,
       h('button', { class: 'tool', title: 'Export… (Ctrl+E)', onclick: () => Lookup.exportTable(tab) }, icon('download')),
       h('button', { class: 'tool', title: 'Row details', onclick: () => { tab.showDetails = !tab.showDetails; tab.paintDetails(); } }, icon('panel')));
     const toolbar = h('div', { class: 'toolbar' }, seg, dataTools, h('div', { class: 'spacer' }), changesBox);
@@ -42,7 +42,11 @@
     const timing = h('span', { class: 'muted' });
     const footer = h('div', { class: 'pager' }, prev, next, pagerInfo, pageSize, h('div', { class: 'spacer' }), timing,
       h('button', { class: 'tool', title: 'Copy the SQL used for this page', onclick: () => tab.data && api.copy(tab.data.sql) }, icon('copy')));
-    const dataView = h('div', { class: 'view-data' }, filterBox, body, footer);
+    // Engines without grid editing yet: say so once, above the rows.
+    const readOnlyNote = type === 'TABLE' && !Lookup.feature('editRows')
+      ? h('div', { class: 'ro-note' }, h('strong', null, 'Read-only: '), Lookup.profile().readOnlyNote || `editing ${Lookup.profile().label} rows here comes in a later version. Use a query tab (Ctrl+T) to change data.`)
+      : null;
+    const dataView = h('div', { class: 'view-data' }, ...[readOnlyNote, filterBox, body, footer].filter(Boolean));
     const structView = h('div', { class: 'view-structure hidden scroll' });
     const ddlView = h('div', { class: 'view-ddl hidden' });
     tab.el = h('div', { class: 'tabview' }, toolbar, dataView, structView, ddlView);

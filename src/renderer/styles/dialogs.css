@@ -89,3 +89,7 @@ html:has(body.menu-layer), body.menu-layer { background: transparent !important;
 .menu-panel .ctx-chevron { margin-left: auto; color: var(--faint); }
 .menu-panel .ctx-hint + .ctx-chevron { margin-left: 6px; }
 .menu-panel .ctx-item .ic.ctx-chevron svg { width: 12px; height: 12px; }
+
+/* The Production question for Redis / MongoDB changes (engine-ops.js) */
+.r-confirm p { margin: 0 0 8px; }
+.r-confirm-cmds { margin: 0 0 10px; padding: 8px 10px; max-height: 200px; overflow: auto; border-radius: 6px; background: var(--hover); font: 11.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-all; user-select: text; }

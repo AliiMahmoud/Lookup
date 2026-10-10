@@ -1,0 +1,37 @@
+// What the workspace UI needs to know about MySQL / MariaDB: names, sidebar sections and features.
+// In MySQL a schema and a database are the same thing, so the sidebar's picker lists databases.
+module.exports = {
+  id: 'mysql',
+  label: 'MySQL',
+  badge: 'My',
+  schemaWord: 'Database',
+  databasesWord: null,
+  splitDialect: 'mysql',
+  quote: '`',
+  sections: [
+    ['TABLE', 'Tables'], ['VIEW', 'Views'], ['SEQUENCE', 'Sequences'], ['PROCEDURE', 'Procedures'],
+    ['FUNCTION', 'Functions'], ['TRIGGER', 'Triggers'], ['EVENT', 'Events'],
+  ],
+  collapsed: ['SEQUENCE', 'TRIGGER', 'EVENT'],
+  tableTypes: ['TABLE'],
+  dataTypes: ['VIEW', 'SEQUENCE'],
+  codeTypes: ['PROCEDURE', 'FUNCTION', 'TRIGGER', 'EVENT'],
+  systemSchemasLabel: 'System databases',
+  features: {
+    databases: false,
+    editRows: false,
+    createTable: false,
+    alterTable: false,
+    truncate: false,
+    dropTable: false,
+    explain: true,
+    dbmsOutput: false,
+    ddlOptions: false,
+    ddlCommits: true,
+    sequences: true,
+  },
+  explain: ['EXPLAIN {sql}'],
+  nextval: 'SELECT NEXTVAL({qname});',
+  selectTop: 'SELECT *\n  FROM {qname}\n LIMIT 100;',
+  defaultPort: 3306,
+};

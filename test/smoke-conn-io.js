@@ -49,25 +49,25 @@ app.on('browser-window-created', (_e, win) => {
       const js = (s) => ws.executeJavaScript(s);
       await js(`window.api.saveConnection({ name: 'Existing', host: 'localhost', port: 1521, service: 'FREEPDB1', user: 'system', password: 'p' })`);
       await js(`Lookup.showWelcome()`); await wait(300);
-      out.buttons = await js(`[...document.querySelectorAll('.home-actions .home-btn')].map((b) => b.textContent.trim() + (b.disabled ? ' [disabled]' : ''))`);
+      out.buttons = await js(`[...document.querySelectorAll('.welcome-actions button')].map((b) => (b.title.split(' (')[0] || b.textContent.trim()) + (b.disabled ? ' [disabled]' : ''))`);
       // Import the XML
       openPath = path.join(dir, 'sqldev.xml');
-      await js(`[...document.querySelectorAll('.home-btn')].find((b) => b.textContent.includes('Import')).click(); 1`); await wait(600);
+      await js(`document.querySelector('.welcome-actions [title^="Import"]').click(); 1`); await wait(600);
       out.preview = await js(`[...document.querySelectorAll('.imp-row')].map((r) => (r.querySelector('input').checked ? '[x] ' : '[ ] ') + r.innerText.replace(/\\s+/g, ' ').trim())`);
       out.note = await js(`document.querySelector('.imp-note').textContent`);
       out.button = await js(`[...document.querySelectorAll('.modal-foot .btn')].pop().textContent`);
       fs.writeFileSync(path.join(__dirname, 'smoke-conn-io.png'), (await ws.capturePage()).toPNG());
       await js(`[...document.querySelectorAll('.modal-foot .btn')].pop().click(); 1`); await wait(800);
       out.afterImport = (await js(`window.api.listConnections()`)).map((c) => `${c.name} | ${c.mode || 'basic'} | ${c.mode === 'string' ? c.connectString : `${c.user}@${c.host}:${c.port}/${c.service} ${c.serviceType}`} | ${c.role || 'DEFAULT'} | pw:${c.hasPassword}`);
-      out.homeList = await js(`[...document.querySelectorAll('.home-conn-name > span:first-child')].map((x) => x.textContent)`);
+      out.homeList = await js(`[...document.querySelectorAll('.conn-item-name')].map((x) => x.firstChild.textContent)`);
       // Import JSON
       openPath = path.join(dir, 'sqldev.json');
-      await js(`[...document.querySelectorAll('.home-btn')].find((b) => b.textContent.includes('Import')).click(); 1`); await wait(500);
+      await js(`document.querySelector('.welcome-actions [title^="Import"]').click(); 1`); await wait(500);
       await js(`[...document.querySelectorAll('.modal-foot .btn')].pop().click(); 1`); await wait(600);
       out.afterJson = (await js(`window.api.listConnections()`)).length;
       // Export, then re-read the export: same connections come back
       savePath = path.join(dir, 'export.xml');
-      await js(`[...document.querySelectorAll('.home-btn')].find((b) => b.textContent.includes('Export')).click(); 1`); await wait(400);
+      await js(`document.querySelector('.welcome-actions [title^="Export"]').click(); 1`); await wait(400);
       await js(`(() => { const c = document.querySelector('.cx-body input[type=checkbox]'); if (c.checked) c.click(); [...document.querySelectorAll('.modal-foot .btn')].pop().click(); })(); 1`); await wait(600);
       const xml = fs.readFileSync(savePath, 'utf8');
       out.exportHead = xml.split('\n').slice(0, 3).join(' ');
@@ -77,7 +77,7 @@ app.on('browser-window-created', (_e, win) => {
       await js(`window.api.saveConnection({ name: 'With password', host: 'pwhost', port: 1521, serviceType: 'service', service: 'P', user: 'pu', password: 'S3cret!', role: 'DEFAULT' })`);
       await js(`Lookup.showWelcome()`); await wait(300);
       savePath = path.join(dir, 'export-pw.xml');
-      await js(`[...document.querySelectorAll('.home-btn')].find((b) => b.textContent.includes('Export')).click(); 1`); await wait(400);
+      await js(`document.querySelector('.welcome-actions [title^="Export"]').click(); 1`); await wait(400);
       out.exportDialog = await js(`({ title: document.querySelector('.modal-title').textContent, include: document.querySelector('.cx-body input[type=checkbox]').checked, saveDisabled: [...document.querySelectorAll('.modal-foot .btn')].pop().disabled, text: document.querySelector('.cx-body').innerText.replace(/\s+/g, ' ') })`);
       fs.writeFileSync(path.join(__dirname, 'smoke-conn-io-export.png'), (await ws.capturePage()).toPNG());
       await js(`(() => { const i = document.querySelector('.cx-pw input'); i.value = 'file-pass'; i.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('.modal-foot .btn')].pop().click(); })(); 1`); await wait(1200);
@@ -88,7 +88,7 @@ app.on('browser-window-created', (_e, win) => {
       pwById.clear();
       await js(`Lookup.showWelcome()`); await wait(300);
       openPath = savePath;
-      await js(`[...document.querySelectorAll('.home-btn')].find((b) => b.textContent.includes('Import')).click(); 1`); await wait(600);
+      await js(`document.querySelector('.welcome-actions [title^="Import"]').click(); 1`); await wait(600);
       out.importPwBox = await js(`document.querySelector('.cx-box')?.innerText.replace(/\s+/g, ' ')`);
       fs.writeFileSync(path.join(__dirname, 'smoke-conn-io-import.png'), (await ws.capturePage()).toPNG());
       await js(`(() => { const i = document.querySelector('.cx-box input[type=password]'); i.value = 'wrong'; i.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('.modal-foot .btn')].pop().click(); })(); 1`); await wait(800);

@@ -81,3 +81,5 @@ tr.del td:not(.rn) { background: var(--del); text-decoration: line-through; colo
 .page-size { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; cursor: default; color: var(--text); }
 .page-size .caret { font-size: 9px; color: var(--muted); }
 .page-size-input { width: 96px; height: 24px; }
+/* Read-only note above the rows (engines without grid editing yet) */
+.ro-note { padding: 7px 12px; font-size: 12px; border-bottom: 1px solid var(--border); color: var(--warn); background: color-mix(in srgb, var(--warn) 9%, var(--bg)); }

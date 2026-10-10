@@ -1,4 +1,4 @@
-// IPC for saved connections, history and the database layer (one Oracle session per workspace).
+// IPC for saved connections, history and the database layer (one database session per workspace).
 const { clipboard } = require('electron');
 const db = require('../db');
 const store = require('../store');
@@ -49,6 +49,13 @@ db.setOnLost((winId, message) => {
   if (ws && !ws.view.webContents.isDestroyed()) ws.view.webContents.send('ws:action', { action: 'connectionLost', message });
 });
 
+// Engine-specific calls (Redis), and what the engine sends on its own (Shell subscriptions).
+handle('db:op', (winId, name, params) => db.engineOp(winId, name, params));
+db.setOnPush((winId, msg) => {
+  const ws = wsByWc.get(winId);
+  if (ws && !ws.view.webContents.isDestroyed()) ws.view.webContents.send('db:push', msg);
+});
+
 handle('db:disconnect', (winId) => db.disconnect(winId));
 
 handle('db:cancel', (winId) => db.cancel(winId));
@@ -68,7 +75,7 @@ handle('db:structure', (winId, owner, name) => db.structure(winId, owner, name))
 handle('db:ddl', (winId, owner, name, type, options) => db.ddl(winId, owner, name, type, options));
 
 // The formatter (about 8 MB) is loaded on first use.
-handle('sql:format', (_id, text) => require('../format').formatScript(String(text || '')));
+handle('sql:format', (winId, text, engineId) => require('../format').formatScript(String(text || ''), db.dialectOf(winId, engineId)));
 
 handle('db:run', (winId, statements, opts) => db.run(winId, statements, opts));
 
@@ -107,6 +114,5 @@ handle('app:newWindow', () => { createWindow(); });
 handle('app:isEmbedded', () => true);
 
 handle('app:platform', () => process.platform);
-handle('app:version', () => require('../../../package.json').version);
 
 handle('app:copy', (_id, text) => clipboard.writeText(String(text)));

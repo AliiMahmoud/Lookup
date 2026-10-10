@@ -1,5 +1,8 @@
 // Bridge for the pop-up menu layer: receives a menu to show and reports the chosen item.
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
+
+// Main asks every page to hand back memory it no longer uses (after big results are closed, or from the gear menu).
+ipcRenderer.on('mem:trim', () => { try { webFrame.clearCache(); } catch { /* ignore */ } });
 
 contextBridge.exposeInMainWorld('menuApi', {
   platform: process.platform,

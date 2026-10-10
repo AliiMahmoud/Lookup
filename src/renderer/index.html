@@ -45,6 +45,8 @@
   <script src="js/sqllog.js"></script>
   <!-- The workspace, one feature per file; they share window.Lookup. boot.js starts it and must be last. -->
   <script src="js/app/core.js"></script>
+  <script src="js/app/features.js"></script>
+  <script src="js/app/engines.js"></script>
   <script src="js/app/status.js"></script>
   <script src="js/app/connections.js"></script>
   <script src="js/app/conn-io.js"></script>
@@ -56,6 +58,8 @@
   <script src="js/app/exports.js"></script>
   <script src="js/app/query-tab.js"></script>
   <script src="js/app/settings.js"></script>
+  <!-- Redis and MongoDB screens: loaded by features.js on their first connection (engine-ops.js is shared by them) -->
+  <script src="js/app/engine-ops.js"></script>
   <script src="js/app/boot.js"></script>
 </body>
 </html>

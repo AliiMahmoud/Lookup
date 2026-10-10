@@ -1,23 +1,22 @@
 // SQL beautifier for the query editor. Formats each SQL statement in place and
 // leaves everything between statements (comments, ';', '/') untouched.
-// PL/SQL blocks (BEGIN/DECLARE/CREATE PROCEDURE…) are kept exactly as written.
+// Procedural blocks (PL/SQL, function bodies…) are kept exactly as written.
+// The dialect (db/<engine>/dialect.js) picks the formatter language and the script splitter.
 const { format } = require('sql-formatter');
 const { split } = require('../shared/sqlsplit');
 
 const OPTIONS = {
-  language: 'plsql',
   tabWidth: 2,
   keywordCase: 'upper',
   functionCase: 'upper',
   dataTypeCase: 'upper',
   identifierCase: 'preserve',
   linesBetweenQueries: 1,
-  paramTypes: { named: [':'] },
 };
 
-function formatScript(text, options = {}) {
-  const opts = { ...OPTIONS, ...options };
-  const stmts = split(text);
+function formatScript(text, dialect = {}, options = {}) {
+  const opts = { ...OPTIONS, language: dialect.formatLanguage || 'sql', ...(dialect.formatOptions || {}), ...options };
+  const stmts = split(text, dialect.splitDialect);
   let out = text;
   let formatted = 0;
   let skipped = 0;

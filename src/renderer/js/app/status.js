@@ -18,7 +18,14 @@
       title: c.name || c.user,
       env: c.env || 'none',
       schema: S.schema,
-      detail: `${c.user}@${c.mode === 'string' ? 'custom connect string' : `${c.host}:${c.port || 1521}/${c.service}`}`,
+      schemaWord: Lookup.profile().schemaWord || 'Schema',
+      detail: c.mode === 'string' && Lookup.engineId() === 'oracle' ? `${c.user}@custom connect string` : Lookup.target(c),
+      engine: Lookup.engineId(),
+      engineLabel: Lookup.profile().label,
+      badge: Lookup.engineOf(c).badge,
+      badgeColor: Lookup.engineOf(c).color,
+      databasesWord: Lookup.profile().databasesWord || null,
+      dbName: S.info.dbName || null,
       autoCommit: S.autoCommit,
       txPending: S.txPending && !S.autoCommit,
     } : S.connecting
@@ -92,16 +99,21 @@
     const sb = $('#statusbar');
     sb.innerHTML = '';
     if (!S.current) {
-      sb.append(h('span', null, `${S.connections.length} saved connection${S.connections.length === 1 ? '' : 's'}`), h('span', { class: 'sb-spacer' }), h('span', { class: 'muted' }, 'Oracle Thin driver · no Instant Client needed'));
+      sb.append(h('span', null, `${S.connections.length} saved connection${S.connections.length === 1 ? '' : 's'}`), h('span', { class: 'sb-spacer' }), h('span', { class: 'muted' }, 'Oracle · PostgreSQL · MySQL · SQLite · ClickHouse · Redis · MongoDB — no client software needed'));
       return;
     }
+    const where = Lookup.isMongo && Lookup.isMongo() ? Lookup.mongoWhere()
+      : Lookup.isRedis && Lookup.isRedis() ? Lookup.redisWhere()
+      : S.current.mode === 'string' && Lookup.engineId() === 'oracle' ? `${S.current.user}@custom` : Lookup.target(S.current);
     sb.append(...[
       S.lost
         ? h('span', { class: 'sb-item sb-lost', title: S.lost }, h('span', { class: 'live lost' }), 'Connection lost',
           h('button', { class: 'sb-btn sb-reconnect', title: 'Reconnect (Ctrl+R)', onclick: reconnect }, 'Reconnect'))
         : h('span', { class: 'sb-item' }, h('span', { class: 'live' }), 'Connected'),
-      h('span', { class: 'sb-item' }, S.current.user + '@' + (S.current.mode === 'string' ? 'custom' : `${S.current.host}:${S.current.port || 1521}/${S.current.service}`)),
-      h('span', { class: 'sb-item muted' }, 'Oracle ' + (S.info.version || '')),
+      h('span', { class: 'sb-item' }, where),
+      h('span', { class: 'sb-item muted' }, `${Lookup.profile().label} ${S.info.version || ''}`),
+      ...(Lookup.isRedis && Lookup.isRedis() ? Lookup.redisStatusItems() : []),
+      ...(Lookup.isMongo && Lookup.isMongo() ? Lookup.mongoStatusItems() : []),
       h('span', { class: 'sb-spacer' }),
       S.txPending && !S.autoCommit ? h('button', { class: 'sb-item sb-btn warn', title: 'Commit or roll back', onclick: txMenu }, 'Uncommitted transaction · Ctrl+S to commit') : null].filter(Boolean));
   }
@@ -130,6 +142,8 @@
       S.txPending = false;
       renderTitlebar();
       S.colCache && S.colCache.clear();
+      if (Lookup.isRedis && Lookup.isRedis()) await Lookup.redisReconnected();
+      if (Lookup.isMongo && Lookup.isMongo()) await Lookup.mongoReconnected();
       renderStatus();
       toast('Reconnected', 'ok', 2000);
     } catch (e) {

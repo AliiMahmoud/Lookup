@@ -24,18 +24,15 @@
   };
   const TYPE_ICON = {
     TABLE: 'table', VIEW: 'view', 'MATERIALIZED VIEW': 'mview', SEQUENCE: 'sequence', PROCEDURE: 'procedure',
-    FUNCTION: 'function', PACKAGE: 'package', TRIGGER: 'trigger', SYNONYM: 'synonym', TYPE: 'type',
+    FUNCTION: 'function', PACKAGE: 'package', TRIGGER: 'trigger', SYNONYM: 'synonym', TYPE: 'type', EVENT: 'history', INDEX: 'key', DICTIONARY: 'columns',
   };
-  const SECTIONS = [
-    ['TABLE', 'Tables'], ['VIEW', 'Views'], ['MATERIALIZED VIEW', 'Materialized Views'], ['SEQUENCE', 'Sequences'],
-    ['PACKAGE', 'Packages'], ['PROCEDURE', 'Procedures'], ['FUNCTION', 'Functions'], ['TRIGGER', 'Triggers'],
-    ['TYPE', 'Types'], ['SYNONYM', 'Synonyms'],
-  ];
+  // Sidebar sections come from the connected engine (Lookup.profile().sections, see engines.js).
   const params = new URLSearchParams(location.search);
   const EMBEDDED = params.get('embedded') === '1'; // hosted as a connection tab inside a window
   const S = {
     platform: 'win32',
     connections: [],
+    selectedConn: null,
     current: null,
     info: null,
     schema: null,
@@ -51,5 +48,5 @@
     filter: '',
   };
 
-  Object.assign(Lookup, { ENVS, TYPE_ICON, SECTIONS, params, EMBEDDED, S });
+  Object.assign(Lookup, { ENVS, TYPE_ICON, params, EMBEDDED, S });
 })();

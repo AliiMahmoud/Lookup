@@ -1,7 +1,7 @@
 // Run with: npm test   (no database needed)
 const assert = require('assert');
 const { split, statementAt } = require('../src/shared/sqlsplit');
-const { buildChanges, buildWhere } = require('../src/main/sqlgen');
+const { buildChanges, buildWhere } = require('../src/main/db/oracle/sqlgen');
 
 let passed = 0;
 const t = (name, fn) => { fn(); passed++; console.log('  ok  ' + name); };
@@ -77,19 +77,20 @@ t('builds WHERE with binds', () => {
 });
 
 const { formatScript } = require('../src/main/format');
+const oracleDialect = require('../src/main/db/oracle/dialect');
 t('beautify keeps comments and PL/SQL, formats SQL', () => {
-  const r = formatScript("-- c\nselect a from t where x=1;\nbegin\n  null;\nend;\n/\nselect 1 from dual");
+  const r = formatScript("-- c\nselect a from t where x=1;\nbegin\n  null;\nend;\n/\nselect 1 from dual", oracleDialect);
   assert.ok(r.text.startsWith('-- c\nSELECT\n  a\nFROM\n  t\nWHERE\n  x = 1;'));
   assert.ok(r.text.includes('begin\n  null;\nend;\n/'));
   assert.deepStrictEqual([r.formatted, r.plsql, r.skipped], [2, 1, 0]);
 });
 t('beautify leaves unparseable statements alone', () => {
-  const r = formatScript('select from where ((;');
+  const r = formatScript('select from where ((;', oracleDialect);
   assert.strictEqual(r.text, 'select from where ((;');
   assert.strictEqual(r.skipped, 1);
 });
 
-const { buildCreateTable } = require('../src/main/sqlgen');
+const { buildCreateTable } = require('../src/main/db/oracle/sqlgen');
 t('CREATE TABLE with defaults, NOT NULL and primary key', () => {
   const r = buildCreateTable({
     owner: 'HR', name: 'untitled_table_11077',
@@ -134,7 +135,7 @@ t('CREATE TABLE validation', () => {
   assert.throws(() => buildCreateTable({ name: 't', columns: [{ name: 'a', type: 'NUMBER' }], primaryKey: ['b'] }), /not in the column list/);
 });
 
-const { buildTruncate, buildDropTable } = require('../src/main/sqlgen');
+const { buildTruncate, buildDropTable } = require('../src/main/db/oracle/sqlgen');
 t('TRUNCATE / DROP TABLE statements', () => {
   assert.strictEqual(buildTruncate('SYSTEM', 'UNTITLED_TABLE_96906'), 'TRUNCATE TABLE "SYSTEM"."UNTITLED_TABLE_96906"');
   assert.strictEqual(buildDropTable('HR', 'Mixed Name'), 'DROP TABLE "HR"."Mixed Name"');

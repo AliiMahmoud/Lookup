@@ -25,7 +25,7 @@ app.on('browser-window-created', (_e, win) => {
       const t0 = Date.now();
       await ws.executeJavaScript(`document.querySelector('.connecting .btn').click(); 1`);
       await wait(500);
-      out.afterCancel = await ws.executeJavaScript(`({ overlay: !!document.querySelector('.connecting'), errorModal: !!document.querySelector('.modal'), form: !!document.querySelector('.home-right'), welcomeVisible: !document.getElementById('welcome').classList.contains('hidden') })`);
+      out.afterCancel = await ws.executeJavaScript(`({ overlay: !!document.querySelector('.connecting'), errorModal: !!document.querySelector('.modal'), form: !!document.querySelector('.conn-form, .home-intro'), welcomeVisible: !document.getElementById('welcome').classList.contains('hidden') })`);
       out.tile = await win.webContents.executeJavaScript(`[...document.querySelectorAll('.rail-name')].map((x) => x.textContent)`);
       console.log('SMOKE-CANCEL', JSON.stringify(out), Date.now() - t0, 'ms');
     } catch (e) { console.log('SMOKE-CANCEL FAILED', e.stack); }

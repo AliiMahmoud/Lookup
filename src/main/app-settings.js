@@ -7,7 +7,7 @@ const db = require('./db');
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
 
 const DEFAULT_SETTINGS = {
-  gpu: false, separateProcesses: false, zoom: 100, theme: 'system', // theme: system | light | dark
+  gpu: false, separateProcesses: false, separateGpuProcess: false, zoom: 100, theme: 'system', // theme: system | light | dark
   connectTimeoutSec: 60, keepAliveSec: 60, healthCheckSec: 30, // network, in seconds (0 = off for the last two)
 };
 
@@ -31,7 +31,11 @@ nativeTheme.themeSource = ['light', 'dark'].includes(settings.theme) ? settings.
 //  - all connections share one renderer process: about -20 MB per extra connection
 //  - network service inside the main process: about -16 MB (the app makes no web requests)
 //  - V8 tuned for size: smaller heaps with large result sets
-if (!settings.gpu) app.disableHardwareAcceleration();
+//  - with software rendering, the graphics work runs inside the main process: about -9 MB and one process fewer
+if (!settings.gpu) {
+  app.disableHardwareAcceleration();
+  if (!settings.separateGpuProcess) app.commandLine.appendSwitch('in-process-gpu');
+}
 
 if (!settings.separateProcesses) app.commandLine.appendSwitch('process-per-site');
 

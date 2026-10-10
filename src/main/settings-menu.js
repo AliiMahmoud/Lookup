@@ -1,36 +1,24 @@
 // The gear menu in the title bar: memory in use, theme, connection timings, performance options.
-const fs = require('fs');
 const { app, BrowserWindow, ipcMain, nativeTheme } = require('electron');
 const db = require('./db');
 const { writeSettings, settings, startedWith, setTheme } = require('./app-settings');
 const { activeWorkspaceOf } = require('./windows');
 const { handle } = require('./ipc/handle');
 const { showMenu } = require('./popup-menu');
-
-/** Total memory of all Lookup processes, in MB (Task Manager style where available). */
-function appMemoryMB() {
-  let kb = 0;
-  for (const p of app.getAppMetrics()) {
-    let v = p.memory.privateBytes; // Windows / macOS
-    if (!v) {
-      try { v = Number((/^Pss:\s+(\d+)/m.exec(fs.readFileSync(`/proc/${p.pid}/smaps_rollup`, 'utf8')) || [])[1]); } catch { v = 0; }
-    }
-    kb += v || p.memory.workingSetSize;
-  }
-  return Math.round(kb / 1024);
-}
+const { memoryReport, connectionUse, freeMemory } = require('./memory');
 
 // Settings menu (gear in the title bar). The memory figure is read when it opens.
-const restartNeeded = () => settings.gpu !== startedWith.gpu || settings.separateProcesses !== startedWith.separateProcesses;
+const RESTART_KEYS = ['gpu', 'separateProcesses', 'separateGpuProcess'];
+const restartNeeded = () => RESTART_KEYS.some((k) => !!settings[k] !== !!startedWith[k]);
 
 const NET_KEYS = ['connectTimeoutSec', 'keepAliveSec', 'healthCheckSec'];
 
 function settingsState() {
   return {
     ...db.configure(), // current network values (clamped)
-    memoryMB: appMemoryMB(), processes: app.getAppMetrics().length,
+    memory: memoryReport(),
     dark: nativeTheme.shouldUseDarkColors, followSystem: settings.theme === 'system',
-    gpu: !!settings.gpu, separateProcesses: !!settings.separateProcesses, restartNeeded: restartNeeded(),
+    gpu: !!settings.gpu, separateProcesses: !!settings.separateProcesses, separateGpuProcess: !!settings.separateGpuProcess, restartNeeded: restartNeeded(),
   };
 }
 
@@ -41,15 +29,25 @@ function applySetting(key, value) {
     writeSettings(settings);
   } else if (key === 'dark') setTheme(nativeTheme.shouldUseDarkColors ? 'light' : 'dark');
   else if (key === 'followSystem') setTheme(settings.theme === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : 'system');
-  else if (key === 'gpu' || key === 'separateProcesses') { settings[key] = !settings[key]; writeSettings(settings); }
+  else if (RESTART_KEYS.includes(key)) { settings[key] = !settings[key]; writeSettings(settings); }
   else if (key === 'restart') { app.relaunch(); app.quit(); }
   return settingsState();
 }
 
-ipcMain.on('shell:settingsMenu', (event, at) => {
+ipcMain.on('shell:settingsMenu', async (event, at) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   const ws = activeWorkspaceOf(win);
   const st = settingsState();
+  const conns = await connectionUse();
+  const mem = st.memory;
+  const rowsText = (n) => (n ? `${n.toLocaleString('en-US')} rows loaded` : 'no rows loaded');
+  const free = async () => {
+    const r = await freeMemory();
+    const target = activeWorkspaceOf(win);
+    if (target && !target.view.webContents.isDestroyed()) {
+      target.view.webContents.send('ws:action', { action: 'toast', kind: 'info', message: r.freedMB ? `Freed ${r.freedMB} MB · ${r.after} MB in use` : `Nothing more to free · ${r.after} MB in use` });
+    }
+  };
   // Connection timings: common values, plus Custom… which asks for any number of seconds.
   const secs = (label, key, choices, offOk) => {
     const cur = st[key];
@@ -65,7 +63,16 @@ ipcMain.on('shell:settingsMenu', (event, at) => {
     };
   };
   showMenu(win, [
-    { label: `Memory in use: ${st.memoryMB} MB`, hint: `${st.processes} processes`, enabled: false },
+    {
+      label: `Memory in use: ${mem.totalMB} MB`,
+      hint: `${mem.processes} processes`,
+      submenu: [
+        ...mem.parts.map((p) => ({ label: p.label, hint: `${p.mb} MB`, enabled: false })),
+        ...(conns.length ? [{ type: 'separator' }, ...conns.map((c) => ({ label: c.title, hint: c.rows === undefined ? '' : `${rowsText(c.rows)} · ${c.tabs} tabs`, enabled: false }))] : []),
+        { type: 'separator' },
+        { label: 'Free unused memory', click: free },
+      ],
+    },
     { type: 'separator' },
     { label: 'Dark theme', type: 'checkbox', checked: st.dark, click: () => applySetting('dark') },
     { label: 'Follow system theme', type: 'checkbox', checked: st.followSystem, click: () => applySetting('followSystem') },
@@ -76,6 +83,7 @@ ipcMain.on('shell:settingsMenu', (event, at) => {
     { type: 'separator' },
     { label: 'Use GPU acceleration', hint: 'uses more memory', type: 'checkbox', checked: st.gpu, click: () => applySetting('gpu') },
     { label: 'Separate process per connection', hint: 'uses more memory', type: 'checkbox', checked: st.separateProcesses, click: () => applySetting('separateProcesses') },
+    { label: 'Separate graphics process', hint: 'uses more memory', type: 'checkbox', checked: st.separateGpuProcess || st.gpu, enabled: !st.gpu, click: () => applySetting('separateGpuProcess') },
     { type: 'separator' },
     { label: st.restartNeeded ? 'Restart Lookup to apply' : 'Restart Lookup', click: () => applySetting('restart') },
   ], at);

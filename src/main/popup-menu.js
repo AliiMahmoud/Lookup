@@ -6,7 +6,9 @@
 const path = require('path');
 const { WebContentsView, ipcMain, screen } = require('electron');
 
-const layers = new WeakMap(); // BrowserWindow -> { view, ready, pending, actions, refocus }
+const layers = new WeakMap(); // BrowserWindow -> { view, ready, pending, actions, refocus, idle }
+// The layer is a page of its own (about 2 MB): closed after this long unused, made again on the next menu.
+const IDLE_MS = 2 * 60 * 1000;
 
 function layerFor(win) {
   let L = layers.get(win);
@@ -24,11 +26,23 @@ function layerFor(win) {
     if (L.pending) { view.webContents.send('menu:show', L.pending); L.pending = null; }
   });
   view.webContents.loadFile(path.join(__dirname, '../renderer/menu.html'));
-  const hideOnChange = () => hide(win);
-  win.on('resize', hideOnChange);
-  win.on('blur', hideOnChange);
-  win.on('closed', () => layers.delete(win));
+  if (!win.menuLayerHooks) { // once per window, however often the layer is made again
+    win.menuLayerHooks = true;
+    const hideOnChange = () => hide(win);
+    win.on('resize', hideOnChange);
+    win.on('blur', hideOnChange);
+    win.on('closed', () => layers.delete(win));
+  }
   return L;
+}
+
+/** Closes an unused layer's page to free its memory. */
+function release(win) {
+  const L = layers.get(win);
+  if (!L || L.view.getVisible() || win.isDestroyed()) return;
+  layers.delete(win);
+  try { win.contentView.removeChildView(L.view); } catch { /* already gone */ }
+  if (!L.view.webContents.isDestroyed()) L.view.webContents.close();
 }
 
 const keyLabel = (acc) => (acc ? acc.replace(/CmdOrCtrl|CommandOrControl/g, process.platform === 'darwin' ? '⌘' : 'Ctrl') : null);
@@ -56,6 +70,7 @@ function serialize(items, actions) {
 function showMenu(win, template, at) {
   if (!win || win.isDestroyed()) return;
   const L = layerFor(win);
+  clearTimeout(L.idle);
   if (!at || at.x === undefined) {
     const c = win.getContentBounds();
     const p = screen.getCursorScreenPoint();
@@ -79,6 +94,8 @@ function hide(win) {
   L.view.setVisible(false);
   L.view.webContents.send('menu:hide');
   if (L.refocus && !L.refocus.isDestroyed()) L.refocus.focus();
+  clearTimeout(L.idle);
+  L.idle = setTimeout(() => release(win), IDLE_MS);
 }
 
 const winOfMenu = (sender) => {

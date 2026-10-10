@@ -1,0 +1,30 @@
+// What the workspace UI needs to know about Redis. Redis isn't SQL, so the window shows its own
+// workspace (workspace: 'redis'): key browser, key tabs, Workbench, Shell and Overview.
+module.exports = {
+  id: 'redis',
+  label: 'Redis',
+  badge: 'Rd',
+  workspace: 'redis',
+  schemaWord: 'Database',
+  databasesWord: null,
+  queryWord: 'Workbench',
+  sections: [],
+  tableTypes: [],
+  dataTypes: [],
+  codeTypes: [],
+  features: {
+    databases: false,
+    transactions: false,
+    editRows: false,
+    createTable: false,
+    alterTable: false,
+    truncate: false,
+    dropTable: false,
+    explain: false,
+    dbmsOutput: false,
+    ddlOptions: false,
+    ddlCommits: false,
+    sequences: false,
+  },
+  defaultPort: 6379,
+};

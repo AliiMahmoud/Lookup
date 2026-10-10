@@ -112,7 +112,10 @@ function closeWorkspace(win, id) {
   const [ws] = win.workspaces.splice(i, 1);
   wsByWc.delete(id);
   win.contentView.removeChildView(ws.view);
-  db.disconnect(id).finally(() => { if (!ws.view.webContents.isDestroyed()) ws.view.webContents.close(); });
+  db.disconnect(id).finally(() => {
+    if (!ws.view.webContents.isDestroyed()) ws.view.webContents.close();
+    setTimeout(() => require('./memory').trimAll({ main: true }), 1500); // the closed connection's memory, back to the system
+  });
   if (!win.workspaces.length) addWorkspace(win);
   else if (win.activeWs === id) activateWorkspace(win, (win.workspaces[i] || win.workspaces[i - 1]).id);
   else pushShell(win);

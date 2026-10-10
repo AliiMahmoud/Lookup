@@ -135,7 +135,7 @@
         commitEvery: st.commitEvery, target: st.target, includeDdl: st.format === 'sql' && st.includeDdl, sheetName: ctx.title,
       };
       const jobId = 'x' + Date.now() + Math.random().toString(36).slice(2, 7);
-      const job = { jobId, format: st.format, filePath, options, owner: ctx.owner, name: ctx.name, type: ctx.type };
+      const job = { jobId, format: st.format, filePath, options, owner: ctx.owner, name: ctx.name, type: ctx.type, engine: window.Lookup && window.Lookup.engineId ? window.Lookup.engineId() : undefined };
       let expected = null;
       if (st.scope === 'all' && ctx.all.source === 'table') {
         Object.assign(job, { source: 'table', filters: ctx.all.filters, sort: ctx.all.sort, columns: allCols ? null : idx.map((i) => ctx.columns[i].name) });

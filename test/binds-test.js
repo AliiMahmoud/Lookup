@@ -2,7 +2,7 @@
 // bind placeholder the driver sees matches a value we pass (catches NJS-098).
 const assert = require('assert');
 const { Statement } = require('oracledb/lib/thin/statement.js');
-const { buildPageQuery, buildChanges, buildWhere } = require('../src/main/sqlgen');
+const { buildPageQuery, buildChanges, buildWhere } = require('../src/main/db/oracle/sqlgen');
 
 let passed = 0;
 const t = (name, fn) => { fn(); passed++; console.log('  ok  ' + name); };
@@ -39,7 +39,7 @@ t('grid edit statements', () => {
 });
 
 t('CREATE TABLE has no bind placeholders', () => {
-  const { sql } = require('../src/main/sqlgen').buildCreateTable({ name: 't', columns: [{ name: 'a', type: 'VARCHAR2(10)', default: "':x'" }] });
+  const { sql } = require('../src/main/db/oracle/sqlgen').buildCreateTable({ name: 't', columns: [{ name: 'a', type: 'VARCHAR2(10)', default: "':x'" }] });
   check(sql, {});
 });
 

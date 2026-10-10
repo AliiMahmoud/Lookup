@@ -10,3 +10,4 @@
 @import url('styles/table-design.css');
 @import url('styles/dialogs.css');
 @import url('styles/sqllog.css');
+/* styles/redis.css and styles/mongo.css are added by js/app/features.js when a Redis / MongoDB connection opens */

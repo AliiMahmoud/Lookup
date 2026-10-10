@@ -55,9 +55,7 @@ app.on('browser-window-created', (_e, win) => {
       await new Promise((r) => ws.once('did-finish-load', r));
       await wait(800);
       out.reveal = await ws.executeJavaScript(`(async () => {
-        // Home: right-click the connection, Edit… opens the form in a dialog.
-        document.querySelector('.home-conn').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 400, clientY: 120 }));
-        [...document.querySelectorAll('.ctx .ctx-item')].find((x) => x.textContent.startsWith('Edit')).click();
+        document.querySelector('.conn-item')?.click();
         await new Promise((r) => setTimeout(r, 300));
         const pw = document.querySelector('.pw-wrap input');
         const before = pw.type + ':' + pw.value;
@@ -66,7 +64,6 @@ app.on('browser-window-created', (_e, win) => {
         return { before, after: pw.type + ':' + pw.value };
       })()`);
       fs.writeFileSync(path.join(__dirname, 'smoke-rename-form.png'), (await ws.capturePage()).toPNG());
-      await ws.executeJavaScript(`document.querySelector('.modal .modal-head .icon-btn').click(); 1`); // close the dialog
       ws.send('ws:action', { action: 'connect', connId: id });
       await wait(800);
       // No OS keychain on the test machine, so the app asks for the password.

@@ -4,7 +4,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const ExcelJS = require('exceljs');
-const { createWriter, sqlLiteral, exactNumber } = require('../src/main/export');
+const { createWriter: create, exactNumber } = require('../src/main/export');
+const dialect = require('../src/main/db/oracle/dialect');
+const { sqlLiteral } = dialect;
+const createWriter = (fmt, f, c, opts = {}) => create(fmt, f, c, { dialect, ...opts });
 
 let passed = 0;
 const t = (name, fn) => { fn(); passed++; console.log('  ok  ' + name); };
