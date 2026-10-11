@@ -26,6 +26,8 @@
   width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: var(--muted);
 }
 .icon-btn:hover { background: var(--hover); color: var(--text); }
+.icon-btn.xs { width: 22px; height: 22px; }
+.icon-btn.xs .ic, .icon-btn.xs .ic svg { width: 13px; height: 13px; }
 .tool {
   display: inline-flex; align-items: center; justify-content: center; gap: 3px;
   min-width: 28px; height: 26px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--muted);

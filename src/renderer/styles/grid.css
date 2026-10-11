@@ -70,7 +70,7 @@ tr.del td:not(.rn) { background: var(--del); text-decoration: line-through; colo
 .long-edit { width: 100%; height: 50vh; resize: vertical; padding: 10px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--bg); font: 12.5px/1.5 var(--mono); outline: none; user-select: text; }
 
 .details { width: 300px; flex: 0 0 300px; border-left: 1px solid var(--border); background: var(--panel); overflow: auto; padding: 0 10px 14px; }
-.details-head { position: sticky; top: 0; background: var(--panel); padding: 10px 0 8px; font-weight: 650; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); z-index: 1; }
+.details-head { display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--panel); padding: 6px 0 4px; font-weight: 650; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); z-index: 1; }
 .detail-row { margin-bottom: 9px; }
 .detail-label { display: flex; justify-content: space-between; gap: 8px; font-family: var(--mono); font-size: 11.5px; margin-bottom: 3px; }
 .detail-label .muted { font-size: 10.5px; }

@@ -135,11 +135,18 @@
       }
     };
 
+    tab.closeDetails = () => {
+      tab.showDetails = false;
+      tab.paintDetails();
+      if (tab.grid) tab.grid.el.focus({ preventScroll: true });
+    };
+
     tab.paintDetails = () => {
       details.classList.toggle('hidden', !tab.showDetails);
       if (!tab.showDetails) return;
       details.innerHTML = '';
-      details.append(h('div', { class: 'details-head' }, 'Row details'));
+      details.append(h('div', { class: 'details-head' }, h('span', null, 'Row details'),
+        h('button', { class: 'icon-btn xs', title: 'Close (Esc)', onclick: () => tab.closeDetails() }, icon('x'))));
       const g = tab.grid;
       if (!g || tab.selected === null || tab.selected === undefined) {
         details.append(h('div', { class: 'empty-small' }, 'Select a row'));
@@ -237,6 +244,8 @@
         return true;
       }
       if (e.key === 'F5' || (mod && e.key.toLowerCase() === 'r')) { e.preventDefault(); tab.reload(); return true; }
+      // Esc closes the row details, unless it was for the filter bar (which closes itself).
+      if (e.key === 'Escape' && tab.showDetails && !filterBox.contains(e.target)) { e.preventDefault(); tab.closeDetails(); return true; }
       return false;
     };
     tab.onShow = () => { if (tab.grid) tab.grid.paint(); };
