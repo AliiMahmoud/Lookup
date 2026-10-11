@@ -15,7 +15,7 @@
   if (api.platform === 'darwin') document.getElementById('shellbar').classList.add('mac');
   const add = document.getElementById('conn-add');
   add.append(icon('plus'));
-  add.addEventListener('click', () => { const r = add.getBoundingClientRect(); api.connectMenu({ x: Math.round(r.right + 4), y: Math.round(r.top) }); });
+  add.addEventListener('click', () => api.newConnection());
   // Settings (gear) in the top-right corner of the title bar, always visible.
   const gear = document.getElementById('tb-settings');
   gear.append(icon('gear'));

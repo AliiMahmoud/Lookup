@@ -23,6 +23,7 @@ handle('conn:sealPasswords', (_id, filePassword) => {
 });
 handle('conn:openPasswords', (_id, sealed, filePassword) => require('../conn-seal').open(sealed, filePassword));
 handle('conn:delete', (_id, connId) => store.connections.remove(connId));
+handle('conn:reorder', (_id, ids) => store.connections.reorder(ids));
 
 handle('conn:test', (_id, cfg) => {
   let full = cfg;

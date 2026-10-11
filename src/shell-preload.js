@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('shellApi', {
   activate: (id) => ipcRenderer.send('shell:activate', id),
   close: (id) => ipcRenderer.send('shell:close', id),
   connectMenu: (at) => ipcRenderer.send('shell:connectMenu', at),
+  newConnection: () => ipcRenderer.send('shell:newConnection'),
   tileMenu: (id) => ipcRenderer.send('shell:tileMenu', id),
   pdbMenu: (at) => ipcRenderer.send('shell:pdbMenu', at),
   settingsMenu: (at) => ipcRenderer.send('shell:settingsMenu', at),

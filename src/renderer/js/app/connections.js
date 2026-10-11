@@ -18,6 +18,8 @@
   }
   async function showWelcome() {
     S.connections = await api.listConnections();
+    // The saved panel width lives in settings.json, so every tab and window gets the same one.
+    try { const pw = await api.welcomeWidth(); if (pw) document.documentElement.style.setProperty('--welcome-w', pw + 'px'); } catch { /* keep the current width */ }
     $('#workspace').classList.add('hidden');
     const w = $('#welcome');
     w.classList.remove('hidden');
@@ -30,6 +32,19 @@
     w.innerHTML = '';
     const search = h('input', { class: 'input', placeholder: 'Search connections', oninput: () => paintList() });
     const list = h('div', { class: 'conn-list' });
+    // Drag a connection onto another to move it above or below (the half of the row under the pointer decides).
+    let dragId = null;
+    const clearDrop = () => list.querySelectorAll('.drop-before, .drop-after').forEach((x) => x.classList.remove('drop-before', 'drop-after'));
+    const dropAfter = (e) => { const r = e.currentTarget.getBoundingClientRect(); return e.clientY > r.top + r.height / 2; };
+    const moveConn = async (id, targetId, after) => {
+      const from = S.connections.findIndex((x) => x.id === id);
+      if (from < 0 || id === targetId) return;
+      const [moved] = S.connections.splice(from, 1);
+      const to = S.connections.findIndex((x) => x.id === targetId);
+      S.connections.splice(to < 0 ? S.connections.length : to + (after ? 1 : 0), 0, moved);
+      paintList();
+      try { await api.reorderConnections(S.connections.map((x) => x.id)); } catch (e) { toast(e.message, 'err'); }
+    };
     const paintList = () => {
       const q = search.value.trim().toLowerCase();
       list.innerHTML = '';
@@ -39,13 +54,27 @@
         const env = ENVS[c.env || 'none'];
         list.append(h('div', {
           class: 'conn-item' + (S.selectedConn && S.selectedConn.id === c.id ? ' sel' : ''),
-          onclick: () => { S.selectedConn = { ...c, keepPassword: true, password: '' }; renderWelcome(); },
           ondblclick: () => connectTo(c.id),
+          draggable: 'true',
+          ondragstart: (e) => { dragId = c.id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', c.name || ''); e.currentTarget.classList.add('dragging'); },
+          ondragend: (e) => { dragId = null; e.currentTarget.classList.remove('dragging'); clearDrop(); },
+          ondragover: (e) => {
+            if (!dragId || dragId === c.id) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const after = dropAfter(e);
+            if (e.currentTarget.classList.contains(after ? 'drop-after' : 'drop-before')) return;
+            clearDrop();
+            e.currentTarget.classList.add(after ? 'drop-after' : 'drop-before');
+          },
+          ondragleave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.classList.remove('drop-before', 'drop-after'); },
+          ondrop: (e) => { if (!dragId || dragId === c.id) return; e.preventDefault(); const id = dragId; dragId = null; moveConn(id, c.id, dropAfter(e)); },
           oncontextmenu: (e) => {
             e.preventDefault();
             contextMenu(e.clientX, e.clientY, [
               { label: 'Connect', icon: 'plug', onClick: () => connectTo(c.id) },
               { label: 'Connect in a new tab', icon: 'window', onClick: () => (api.openConnection ? api.openConnection(c.id) : api.newWindow()) },
+              { label: 'Edit', icon: 'edit', onClick: () => { S.selectedConn = { ...c, keepPassword: true, password: '' }; renderWelcome(); } },
               { label: 'Duplicate', icon: 'copy', onClick: () => { S.selectedConn = { ...c, id: null, name: c.name + ' copy', password: '', keepPassword: false }; renderWelcome(); } },
               '-',
               { label: 'Delete', icon: 'trash', danger: true, onClick: () => deleteConn(c) },
@@ -61,13 +90,34 @@
     paintList();
     const left = h('div', { class: 'welcome-left' },
       h('div', { class: 'welcome-head' },
-        h('div', null, h('h1', null, 'Connections'), h('p', { class: 'muted' }, 'Click to edit, double-click to connect')),
+        h('div', null, h('h1', null, 'Connections'), h('p', { class: 'muted' }, 'Double-click to connect')),
         h('div', { class: 'welcome-actions' },
           h('button', { class: 'tool', title: 'Import connections from an Oracle SQL Developer export (.xml or .json)', onclick: () => Lookup.importConnections() }, icon('open')),
           h('button', { class: 'tool', title: 'Export connections for Oracle SQL Developer (.xml), optionally with passwords', disabled: !S.connections.length, onclick: () => Lookup.exportConnections() }, icon('download')),
           h('button', { class: 'btn primary sm', onclick: () => { S.selectedConn = { choosing: true }; renderWelcome(); } }, icon('plus'), 'New'))),
       search, list);
-    w.append(left, S.selectedConn
+    // Drag the edge of the connections panel to change its width (remembered between runs).
+    const rz = h('div', { class: 'sb-resizer', onmousedown: (e) => {
+      e.preventDefault();
+      const x0 = e.clientX;
+      const w0 = left.getBoundingClientRect().width;
+      document.body.classList.add('resizing');
+      const move = (ev) => {
+        const nw = Math.max(260, Math.min(720, innerWidth - 360, w0 + ev.clientX - x0));
+        document.documentElement.style.setProperty('--welcome-w', nw + 'px');
+      };
+      const up = () => {
+        document.body.classList.remove('resizing');
+        removeEventListener('mousemove', move);
+        removeEventListener('mouseup', up);
+        const saved = getComputedStyle(document.documentElement).getPropertyValue('--welcome-w');
+        try { localStorage.setItem('lookup.welcomeW', saved); } catch { /* ignore */ }
+        api.welcomeWidth(parseFloat(saved)).catch(() => {});
+      };
+      addEventListener('mousemove', move);
+      addEventListener('mouseup', up);
+    } });
+    w.append(left, rz, S.selectedConn
       ? h('div', { class: 'welcome-right' }, S.selectedConn.choosing ? chooseEngine() : connForm(S.selectedConn))
       : h('div', { class: 'welcome-right welcome-empty' }, homeIntro()));
   }
@@ -107,10 +157,10 @@
     return h('div', { class: 'empty-state home-intro' },
       h('div', { class: 'empty-mark' }),
       h('h2', null, 'Lookup'),
-      h('p', { class: 'muted' }, S.connections.length ? 'Click a connection to edit it, double-click to connect' : 'Click New to add your first connection'),
+      h('p', { class: 'muted' }, S.connections.length ? 'Double-click a connection to connect, right-click to edit it' : 'Click New to add your first connection'),
       h('div', { class: 'shortcuts' },
-        row(['Click'], 'Edit connection'),
         row(['Double-click'], 'Connect'),
+        row(['Right-click'], 'Edit connection'),
         row([mod, 'N'], 'Open a connection'),
         row([mod, 'T'], 'New query'),
         row([mod, 'P'], 'Open anything'),
@@ -290,12 +340,21 @@
       else delete out.readOnly;
       return out;
     };
-    const busy = (b) => form.querySelectorAll('button').forEach((x) => { x.disabled = b; });
+    // While testing: every field and button is disabled and the form is dimmed (the status line stays readable).
+    const busy = (b) => {
+      form.classList.toggle('busy', b);
+      form.querySelectorAll('button, input, select').forEach((x) => { x.disabled = b; });
+    };
 
     const doTest = async () => {
       status.className = 'form-status';
       status.textContent = 'Testing…';
       busy(true);
+      // Loader over the form side (right of the connections list) until the test answers; the list stays usable.
+      const overlay = h('div', { class: 'connecting in-panel' }, h('div', { class: 'spinner' }), h('div', null, `Testing ${f.name ? `"${f.name}"` : 'the connection'}…`));
+      const listPanel = $('#welcome .welcome-left');
+      if (listPanel) overlay.style.left = listPanel.getBoundingClientRect().width + 'px';
+      $('#welcome').append(overlay);
       try {
         const r = await api.testConnection(collect());
         status.className = 'form-status ok';
@@ -304,7 +363,7 @@
       } catch (e) {
         status.className = 'form-status err';
         status.textContent = e.message;
-      } finally { busy(false); }
+      } finally { overlay.remove(); busy(false); }
     };
     const doSave = async () => {
       const cfg = collect();
@@ -429,6 +488,11 @@
       document.removeEventListener('keydown', onEsc, true);
     }
   }
+
+  try {
+    const w = localStorage.getItem('lookup.welcomeW');
+    if (w) document.documentElement.style.setProperty('--welcome-w', w);
+  } catch { /* ignore */ }
 
   Object.assign(Lookup, { showWelcome, connectTo, renderWelcome });
 })();

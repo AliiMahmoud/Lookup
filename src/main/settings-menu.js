@@ -92,3 +92,10 @@ ipcMain.on('shell:settingsMenu', async (event, at) => {
 handle('app:settings', () => settingsState());
 
 handle('app:setSetting', (_id, key, value) => applySetting(key, value));
+
+// Width of the connections panel on the start screen: called with a number to save it, without to read it (0 = default).
+handle('app:welcomeWidth', (_id, width) => {
+  const w = Math.round(Number(width));
+  if (w >= 260 && w <= 720 && w !== settings.welcomeW) { settings.welcomeW = w; writeSettings(settings); }
+  return settings.welcomeW || 0;
+});

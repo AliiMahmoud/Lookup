@@ -58,6 +58,13 @@ const connections = {
   remove(id) {
     writeJson('connections.json', readJson('connections.json', []).filter((x) => x.id !== id));
   },
+  /** Puts the saved connections in the given order; any id not in the list keeps its place at the end. */
+  reorder(ids) {
+    const all = readJson('connections.json', []);
+    const pos = new Map((Array.isArray(ids) ? ids : []).map((id, i) => [id, i]));
+    const rank = (c) => (pos.has(c.id) ? pos.get(c.id) : Infinity);
+    writeJson('connections.json', all.map((c, i) => [c, i]).sort((a, b) => (rank(a[0]) - rank(b[0])) || (a[1] - b[1])).map(([c]) => c));
+  },
 };
 
 const history = {

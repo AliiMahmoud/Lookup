@@ -2,7 +2,7 @@
 const { BrowserWindow, ipcMain } = require('electron');
 const store = require('../store');
 const { wsByWc, activateWorkspace, closeWorkspace, pushShell, activeWorkspaceOf } = require('../windows');
-const { connKey, focusExisting, openConnection, popupPdbMenu, popupConnectMenu } = require('../connection-menus');
+const { connKey, focusExisting, openConnection, popupPdbMenu, popupConnectMenu, newConnectionTab } = require('../connection-menus');
 const { showMenu } = require('../popup-menu');
 const { handle } = require('./handle');
 
@@ -37,6 +37,7 @@ ipcMain.on('shell:close', (event, id) => {
 });
 
 ipcMain.on('shell:connectMenu', (event, at) => popupConnectMenu(BrowserWindow.fromWebContents(event.sender), { at }));
+ipcMain.on('shell:newConnection', (event) => newConnectionTab(BrowserWindow.fromWebContents(event.sender)));
 
 ipcMain.on('shell:pdbMenu', (event, at) => popupPdbMenu(BrowserWindow.fromWebContents(event.sender), at));
 

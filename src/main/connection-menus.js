@@ -83,7 +83,17 @@ async function popupPdbMenu(win, at) {
   showMenu(win, items, at);
 }
 
-// The + menu for opening another connection.
+/** The rail's + button: shows the empty "New connection" tab if the window has one, else opens one. */
+function newConnectionTab(win) {
+  if (!win) return;
+  const active = activeWorkspaceOf(win);
+  const free = (ws) => ws && !ws.state.connected && !ws.state.connecting;
+  const empty = free(active) ? active : (win.workspaces || []).find(free);
+  if (empty) activateWorkspace(win, empty.id);
+  else addWorkspace(win);
+}
+
+// The menu for opening another connection (Ctrl+N).
 function popupConnectMenu(win, { atRail = false, at: anchor } = {}) {
   const conns = store.connections.list();
   const active = activeWorkspaceOf(win);
@@ -104,4 +114,4 @@ function popupConnectMenu(win, { atRail = false, at: anchor } = {}) {
   showMenu(win, items, at);
 }
 
-module.exports = { connKey, focusExisting, openConnection, popupPdbMenu, popupConnectMenu };
+module.exports = { connKey, focusExisting, openConnection, popupPdbMenu, popupConnectMenu, newConnectionTab };
