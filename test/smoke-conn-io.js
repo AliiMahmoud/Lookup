@@ -50,6 +50,17 @@ app.on('browser-window-created', (_e, win) => {
       await js(`window.api.saveConnection({ name: 'Existing', host: 'localhost', port: 1521, service: 'FREEPDB1', user: 'system', password: 'p' })`);
       await js(`Lookup.showWelcome()`); await wait(300);
       out.buttons = await js(`[...document.querySelectorAll('.welcome-actions button')].map((b) => (b.title.split(' (')[0] || b.textContent.trim()) + (b.disabled ? ' [disabled]' : ''))`);
+      // New connection from a URL (as TablePlus exports them): the form opens filled in, nothing is saved yet
+      const sampleUrl = 'oracle://system:MyStrongPass123@127.0.0.2/Free?statusColor=007F3D&env=development&name=Testing%20connection&tLSMode=0&usePrivateKey=false&safeModeLevel=0&advancedSafeModeLevel=0&driverVersion=0&lazyload=false';
+      await js(`document.querySelector('.welcome-actions [title^="New connection from a URL"]').click(); 1`); await wait(300);
+      await js(`(() => { const i = document.querySelector('.modal input'); i.value = 'mssql://sa@h/db'; [...document.querySelectorAll('.modal-foot .btn')].pop().click(); })(); 1`); await wait(200);
+      out.urlError = await js(`document.querySelector('.modal .cx-status').textContent`);
+      fs.writeFileSync(path.join(__dirname, 'smoke-conn-io-url.png'), (await ws.capturePage()).toPNG());
+      await js(`(() => { const i = document.querySelector('.modal input'); i.value = ${JSON.stringify(sampleUrl)}; i.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('.modal-foot .btn')].pop().click(); })(); 1`); await wait(400);
+      out.urlForm = await js(`({ dialogOpen: !!document.querySelector('.modal'), title: document.querySelector('.conn-form h2').textContent, type: document.querySelector('.type-chip.on').textContent, tag: document.querySelector('.env-chip.on').textContent, fields: [...document.querySelectorAll('.conn-form input.input')].map((i) => i.value), service: document.querySelector('.conn-form select').value })`);
+      out.urlForm.saved = (await js(`window.api.listConnections()`)).length;
+      fs.writeFileSync(path.join(__dirname, 'smoke-conn-io-url-form.png'), (await ws.capturePage()).toPNG());
+      await js(`document.querySelector('.conn-form .form-close').click(); 1`); await wait(200);
       // Import the XML
       openPath = path.join(dir, 'sqldev.xml');
       await js(`document.querySelector('.welcome-actions [title^="Import"]').click(); 1`); await wait(600);

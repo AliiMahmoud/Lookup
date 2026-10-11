@@ -4,7 +4,7 @@
 // work; calls on an open workspace go to the engine of that workspace's session.
 const { engine, engineFor } = require('./engines');
 const { sessions, get } = require('./common/sessions');
-const { test, connect, disconnect, disconnectAll, cancel, setAutoCommit, commit, rollback, reconnect, cancelConnect, closeStuckSession } = require('./common/connection');
+const { test, connect, disconnect, disconnectAll, cancel, setAutoCommit, commit, rollback, reconnect, cancelConnect, cancelTest, closeStuckSession } = require('./common/connection');
 const { configure } = require('./common/net');
 const { setOnLost } = require('./common/health');
 const { sqlLog, clearSqlLog, trackConnection, newLog } = require('./common/sql-log');
@@ -39,7 +39,7 @@ const dialectOf = (winId, engineId) => {
 };
 
 module.exports = {
-  test, connect, disconnect, disconnectAll, cancel, setAutoCommit, commit, rollback, reconnect, cancelConnect, closeStuckSession,
+  test, connect, disconnect, disconnectAll, cancel, setAutoCommit, commit, rollback, reconnect, cancelConnect, cancelTest, closeStuckSession,
   configure, setOnLost,
   sqlLog, clearSqlLog, trackConnection, newLog,
   run,

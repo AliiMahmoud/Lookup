@@ -5,18 +5,35 @@ const { sessions, get } = require('./sessions');
 const { newLog, trackConnection } = require('./sql-log');
 const { STOP_GRACE_MS, lostMessage, markLost, watchConnection, withTimeout } = require('./health');
 
-async function test(cfg) {
-  const engine = engineFor(cfg);
-  const conn = await engine.open(cfg);
-  try {
-    return await engine.describe(conn);
-  } finally {
-    await conn.close();
-  }
-}
-
 // Connect attempts in progress, so Cancel can abandon them (winId -> reject function).
 const pendingConnects = new Map();
+// The same for Test in the connection form.
+const pendingTests = new Map();
+
+async function test(cfg, winId) {
+  const engine = engineFor(cfg);
+  // As in connect(): Cancel stops waiting, and the test connection is closed when it arrives.
+  let cancelled = false;
+  const run = (async () => {
+    const conn = await engine.open(cfg);
+    try {
+      return cancelled ? null : await engine.describe(conn);
+    } finally {
+      await conn.close();
+    }
+  })();
+  return new Promise((resolve, reject) => {
+    pendingTests.set(winId, () => { cancelled = true; reject(Object.assign(new Error('Connection cancelled'), { cancelled: true })); });
+    run.then(resolve, reject);
+  }).finally(() => pendingTests.delete(winId));
+}
+
+/** Cancel button on "Testing …": stop waiting for the test in progress. */
+function cancelTest(winId) {
+  const abort = pendingTests.get(winId);
+  if (abort) abort();
+  return !!abort;
+}
 
 async function connect(winId, cfg) {
   await disconnect(winId);
@@ -111,4 +128,4 @@ async function commit(winId) { await get(winId).conn.commit(); }
 
 async function rollback(winId) { await get(winId).conn.rollback(); }
 
-module.exports = { test, connect, disconnect, disconnectAll, cancel, setAutoCommit, commit, rollback, reconnect, cancelConnect, closeStuckSession };
+module.exports = { test, connect, disconnect, disconnectAll, cancel, setAutoCommit, commit, rollback, reconnect, cancelConnect, cancelTest, closeStuckSession };

@@ -72,6 +72,7 @@
     gauge: '<path d="M2.6 11.5a5.6 5.6 0 1 1 10.8 0"/><path d="M8 9.6 10.6 6M8 9.6h.01"/>',
     folder: '<path d="M2 4.5h4l1.2 1.3H14v6.7H2z"/>',
     clock: '<circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.2l2 1.3"/>',
+    link: '<path d="M6.8 9.2a2.6 2.6 0 0 0 3.7 0l2.2-2.2a2.6 2.6 0 0 0-3.7-3.7l-.9.9M9.2 6.8a2.6 2.6 0 0 0-3.7 0L3.3 9a2.6 2.6 0 0 0 3.7 3.7l.9-.9"/>',
   };
   function icon(name, cls) {
     const span = document.createElement('span');

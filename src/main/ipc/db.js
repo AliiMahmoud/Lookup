@@ -25,11 +25,12 @@ handle('conn:openPasswords', (_id, sealed, filePassword) => require('../conn-sea
 handle('conn:delete', (_id, connId) => store.connections.remove(connId));
 handle('conn:reorder', (_id, ids) => store.connections.reorder(ids));
 
-handle('conn:test', (_id, cfg) => {
+handle('conn:test', (winId, cfg) => {
   let full = cfg;
   if (cfg.keepPassword && cfg.id) full = { ...cfg, password: (store.connections.get(cfg.id) || {}).password };
-  return db.test(full);
+  return db.test(full, winId);
 });
+handle('conn:cancelTest', (winId) => db.cancelTest(winId));
 
 handle('db:connect', (winId, connId, password) => {
   const cfg = store.connections.get(connId);

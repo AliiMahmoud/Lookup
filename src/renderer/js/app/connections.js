@@ -94,6 +94,7 @@
         h('div', { class: 'welcome-actions' },
           h('button', { class: 'tool', title: 'Import connections from an Oracle SQL Developer export (.xml or .json)', onclick: () => Lookup.importConnections() }, icon('open')),
           h('button', { class: 'tool', title: 'Export connections for Oracle SQL Developer (.xml), optionally with passwords', disabled: !S.connections.length, onclick: () => Lookup.exportConnections() }, icon('download')),
+          h('button', { class: 'tool', title: 'New connection from a URL (oracle://user:password@host/service, postgres://…, mysql://…)', onclick: () => Lookup.importFromUrl() }, icon('link')),
           h('button', { class: 'btn primary sm', onclick: () => { S.selectedConn = { choosing: true }; renderWelcome(); } }, icon('plus'), 'New'))),
       search, list);
     // Drag the edge of the connections panel to change its width (remembered between runs).
@@ -351,7 +352,11 @@
       status.textContent = 'Testing…';
       busy(true);
       // Loader over the form side (right of the connections list) until the test answers; the list stays usable.
-      const overlay = h('div', { class: 'connecting in-panel' }, h('div', { class: 'spinner' }), h('div', null, `Testing ${f.name ? `"${f.name}"` : 'the connection'}…`));
+      let cancelled = false;
+      const cancelBtn = h('button', { class: 'btn', onclick: () => { cancelled = true; cancelBtn.disabled = true; cancelBtn.textContent = 'Cancelling…'; api.cancelTest().catch(() => {}); } }, 'Cancel');
+      const overlay = h('div', { class: 'connecting in-panel' }, h('div', { class: 'spinner' }), h('div', null, `Testing ${f.name ? `"${f.name}"` : 'the connection'}…`), cancelBtn);
+      const onEsc = (e) => { if (e.key === 'Escape' && !cancelled) { e.preventDefault(); cancelBtn.click(); } };
+      document.addEventListener('keydown', onEsc, true);
       const listPanel = $('#welcome .welcome-left');
       if (listPanel) overlay.style.left = listPanel.getBoundingClientRect().width + 'px';
       $('#welcome').append(overlay);
@@ -361,9 +366,9 @@
         const where = mongo ? `${r.topology}${r.atlas ? ' (Atlas)' : ''} · database ${r.dbName}` : redis ? r.dbName : oracle ? `schema ${r.schema}` : engine.id === 'postgres' ? `database ${r.dbName} · schema ${r.schema}` : fileBased ? r.dbName : r.dbName ? `database ${r.dbName}` : 'no default database';
         status.textContent = `Connected · ${r.product || engine.label} ${r.version} · ${where}`;
       } catch (e) {
-        status.className = 'form-status err';
-        status.textContent = e.message;
-      } finally { overlay.remove(); busy(false); }
+        if (cancelled || /Connection cancelled/.test(e.message)) { status.className = 'form-status'; status.textContent = 'Test cancelled'; }
+        else { status.className = 'form-status err'; status.textContent = e.message; }
+      } finally { overlay.remove(); busy(false); document.removeEventListener('keydown', onEsc, true); }
     };
     const doSave = async () => {
       const cfg = collect();

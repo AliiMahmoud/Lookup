@@ -146,6 +146,92 @@
     ];
   }
 
+  // ---------- connection URLs ----------
+  // scheme://user:password@host:port/database?name=…&env=…  as TablePlus and most tools write them.
+  const URL_ENGINES = {
+    oracle: 'oracle', postgres: 'postgres', postgresql: 'postgres', pg: 'postgres', mysql: 'mysql', mariadb: 'mysql',
+    clickhouse: 'clickhouse', redis: 'redis', rediss: 'redis', mongodb: 'mongodb', 'mongodb+srv': 'mongodb', sqlite: 'sqlite', sqlite3: 'sqlite',
+  };
+  const URL_ENVS = { local: 'local', dev: 'dev', development: 'dev', test: 'dev', testing: 'dev', staging: 'staging', prod: 'prod', production: 'prod' };
+  // Settings other tools add to the URL that mean nothing to the database driver.
+  const URL_APP_PARAMS = /^(name|env|statuscolor|tlsmode|useprivatekey|safemodelevel|advancedsafemodelevel|driverversion|lazyload)$/i;
+  const SSL_WORDS = {
+    disable: 'disable', disabled: 'disable', false: 'disable', off: 'disable', allow: 'prefer', prefer: 'prefer', preferred: 'prefer',
+    require: 'require', required: 'require', true: 'require', 'verify-ca': 'verify', 'verify-full': 'verify', verify_ca: 'verify', verify_identity: 'verify',
+  };
+  const TLS_MODES = { 1: 'disable', 2: 'require', 3: 'verify', 4: 'verify' }; // TablePlus tLSMode; 0 = the default
+
+  /** A connection URL -> a new, unsaved Lookup connection (for the connection form). Throws when it can't be read. */
+  function connFromUrl(text) {
+    const url = String(text || '').trim();
+    const m = /^([a-z][a-z0-9+.-]*):\/\/(.*)$/is.exec(url);
+    if (!m) throw new Error('That is not a connection URL. Expected something like oracle://user:password@host:1521/service');
+    const scheme = m[1].toLowerCase();
+    if (/\+ssh$/.test(scheme)) throw new Error('This URL connects through an SSH tunnel, which Lookup does not support.');
+    const engine = URL_ENGINES[scheme];
+    if (!engine) throw new Error(`"${scheme}://" is not a database Lookup knows. Supported: oracle, postgres, mysql, mariadb, clickhouse, redis, mongodb, sqlite.`);
+    const dec = (v) => { try { return decodeURIComponent(v); } catch { return v; } };
+    const [beforeQuery, ...queryRest] = m[2].split('#')[0].split('?');
+    const params = queryRest.join('?').split('&').filter(Boolean).map((kv) => { const i = kv.indexOf('='); return i < 0 ? [kv, ''] : [kv.slice(0, i), kv.slice(i + 1)]; });
+    const param = (...names) => { const hit = params.find(([k]) => names.includes(k.toLowerCase())); return hit ? dec(hit[1].replace(/\+/g, ' ')) : ''; };
+    const base = { engine, name: param('name'), env: URL_ENVS[param('env').toLowerCase()] || 'none', mode: 'basic' };
+    if (engine === 'sqlite') {
+      const file = dec(beforeQuery).replace(/^\/(?=\/|[A-Za-z]:)/, ''); // sqlite:///abs/path and sqlite:///C:/path
+      if (!file) throw new Error('This SQLite URL has no file path.');
+      return { ...base, file };
+    }
+    const slash = beforeQuery.indexOf('/');
+    const authority = slash < 0 ? beforeQuery : beforeQuery.slice(0, slash);
+    const path = dec(slash < 0 ? '' : beforeQuery.slice(slash + 1));
+    const at = authority.lastIndexOf('@');
+    const login = at < 0 ? '' : authority.slice(0, at);
+    const hosts = authority.slice(at + 1);
+    const colon = login.indexOf(':');
+    const c = { ...base, user: dec(colon < 0 ? login : login.slice(0, colon)), password: colon < 0 ? '' : dec(login.slice(colon + 1)) };
+    if (!hosts) throw new Error('This URL has no host.');
+    const ssl = SSL_WORDS[param('sslmode', 'ssl-mode', 'ssl', 'tls').toLowerCase()] || TLS_MODES[param('tlsmode')] || (scheme === 'rediss' ? 'require' : '');
+    if (engine === 'mongodb') {
+      // Several hosts and driver options are possible: kept as a URL, without the login and the other tool's own settings.
+      const query = params.filter(([k]) => !URL_APP_PARAMS.test(k)).map(([k, v]) => `${k}=${v}`).join('&');
+      return { ...c, mode: 'string', database: path, connectString: `${scheme}://${hosts}/${slash < 0 ? '' : beforeQuery.slice(slash + 1)}${query ? '?' + query : ''}` };
+    }
+    const hp = /^(\[[^\]]+\]|[^:]*)(?::(\d+))?$/.exec(hosts);
+    if (!hp || !hp[1]) throw new Error(`Could not read the host in "${hosts}".`);
+    c.host = hp[1].replace(/^\[|\]$/g, '');
+    c.port = Number(hp[2]) || (engine === 'clickhouse' && (ssl === 'require' || ssl === 'verify') ? 8443 : Lookup.ENGINES[engine].port);
+    if (engine === 'oracle') return { ...c, serviceType: param('sid') ? 'sid' : 'service', service: param('sid') || path };
+    if (engine === 'redis') return { ...c, database: Number(path) || 0, ...(ssl && ssl !== 'prefer' ? { ssl } : {}) };
+    if (engine === 'clickhouse') return { ...c, ...(path ? { database: path } : {}), ...(ssl && ssl !== 'prefer' ? { ssl } : {}) };
+    return { ...c, database: path, ...(ssl ? { ssl } : {}) };
+  }
+
+  /** Asks for a connection URL and opens the New connection form filled in from it (nothing is saved yet). */
+  function importFromUrl() {
+    const input = h('input', { class: 'input mono', placeholder: 'oracle://user:password@host:1521/service', spellcheck: 'false', autocomplete: 'off' });
+    const status = h('div', { class: 'cx-status' });
+    let m;
+    const go = () => {
+      let conn;
+      try { conn = connFromUrl(input.value); } catch (e) { status.textContent = e.message; input.focus(); return false; }
+      S.selectedConn = { ...conn, id: null };
+      S.lastEngine = conn.engine;
+      Lookup.renderWelcome();
+      return true;
+    };
+    input.addEventListener('input', () => { status.textContent = ''; });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); if (go()) m.close(); } });
+    m = modal({
+      title: 'New connection from a URL',
+      wide: true,
+      body: h('div', { class: 'cx-body' },
+        h('div', { class: 'cx-label' }, 'Paste a connection URL'),
+        input,
+        h('p', { class: 'muted cx-note' }, 'Oracle, PostgreSQL, MySQL / MariaDB, ClickHouse, Redis, MongoDB and SQLite URLs, including the ones TablePlus exports (name and environment are read too). The connection form opens filled in; nothing is saved until you save it there.'),
+        status),
+      actions: [{ label: 'Cancel' }, { label: 'Continue', kind: 'primary', onClick: go }],
+    });
+  }
+
   // ---------- UI ----------
   async function importConnections() {
     let file;
@@ -269,5 +355,5 @@
     setTimeout(() => (include.checked ? pw.focus() : null), 0);
   }
 
-  Object.assign(Lookup, { importConnections, exportConnections, readSqlDevFile, toLookup, toSqlDevXml });
+  Object.assign(Lookup, { importConnections, exportConnections, importFromUrl, connFromUrl, readSqlDevFile, toLookup, toSqlDevXml });
 })();
