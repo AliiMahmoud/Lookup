@@ -1,20 +1,43 @@
 // PostgreSQL DDL. The server has no single "get DDL" call, so it is put together from the catalog
 // functions pg_dump also uses (pg_get_viewdef, pg_get_functiondef, pg_get_constraintdef, …).
 const { qi, qname, lit } = require('./sqlgen');
-const { relOid } = require('./metadata');
 
 const DDL_DEFAULTS = { indexes: true, comments: true, triggers: true, schema: true };
 
+const NON_CONSTRAINT_INDEXES = `(SELECT json_agg(pg_get_indexdef(ix.indexrelid) ORDER BY i.relname)
+            FROM pg_index ix JOIN pg_class i ON i.oid = ix.indexrelid
+           WHERE ix.indrelid = c.oid
+             AND NOT EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conindid = ix.indexrelid AND k.contype IN ('p', 'u', 'x')))`;
+
+/** One row about schema.name, read in a single query (each part used to be its own round trip). */
+async function relRow(conn, schema, name, exprs) {
+  const r = await conn.execute(
+    `SELECT ${exprs.join(',\n            ')}
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1 AND c.relname = $2`,
+    [schema, name]
+  );
+  if (!r.rows.length) throw new Error(`${schema}.${name} not found`);
+  return r.rows[0];
+}
+
+const list = (json) => (json ? JSON.parse(json) : []);
+
 async function tableDdl(conn, schema, name, o) {
   const target = o.schema ? qname(schema, name) : qi(name);
-  const oid = await relOidOn(conn, schema, name);
-  const cols = (await conn.execute(
-    `SELECT a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull, pg_get_expr(d.adbin, d.adrelid), a.attidentity,
-            col_description(a.attrelid, a.attnum)
-       FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-      WHERE a.attrelid = $1 AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attnum`,
-    [oid]
-  )).rows;
+  const [colsJson, consJson, part, idxJson, tc, trJson] = await relRow(conn, schema, name, [
+    `(SELECT json_agg(json_build_array(a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull, pg_get_expr(d.adbin, d.adrelid),
+                                       a.attidentity::text, col_description(a.attrelid, a.attnum)) ORDER BY a.attnum)
+        FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+       WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped)`,
+    `(SELECT json_agg(json_build_array(k.conname, pg_get_constraintdef(k.oid, true))
+                      ORDER BY CASE k.contype WHEN 'p' THEN 1 WHEN 'u' THEN 2 WHEN 'c' THEN 3 WHEN 'x' THEN 4 ELSE 5 END, k.conname)
+        FROM pg_constraint k WHERE k.conrelid = c.oid AND k.contype IN ('p', 'u', 'f', 'c', 'x'))`,
+    `pg_get_partkeydef(c.oid)`,
+    o.indexes ? NON_CONSTRAINT_INDEXES : 'NULL',
+    o.comments ? `obj_description(c.oid, 'pg_class')` : 'NULL',
+    o.triggers ? `(SELECT json_agg(pg_get_triggerdef(t.oid, true) ORDER BY t.tgname) FROM pg_trigger t WHERE t.tgrelid = c.oid AND NOT t.tgisinternal)` : 'NULL',
+  ]);
+  const cols = list(colsJson);
   const lines = cols.map(([col, type, notNull, def, identity]) => {
     let line = `  ${qi(col)} ${type}`;
     if (identity === 'a') line += ' GENERATED ALWAYS AS IDENTITY';
@@ -23,64 +46,40 @@ async function tableDdl(conn, schema, name, o) {
     if (notNull) line += ' NOT NULL';
     return line;
   });
-  const cons = (await conn.execute(
-    `SELECT conname, pg_get_constraintdef(oid, true) FROM pg_constraint
-      WHERE conrelid = $1 AND contype IN ('p', 'u', 'f', 'c', 'x')
-      ORDER BY CASE contype WHEN 'p' THEN 1 WHEN 'u' THEN 2 WHEN 'c' THEN 3 WHEN 'x' THEN 4 ELSE 5 END, conname`,
-    [oid]
-  )).rows;
-  for (const [cname, def] of cons) lines.push(`  CONSTRAINT ${qi(cname)} ${def}`);
-  const part = (await conn.execute(`SELECT pg_get_partkeydef($1::oid)`, [oid])).rows[0][0];
+  for (const [cname, def] of list(consJson)) lines.push(`  CONSTRAINT ${qi(cname)} ${def}`);
   const parts = [`CREATE TABLE ${target} (\n${lines.join(',\n')}\n)${part ? ` PARTITION BY ${part}` : ''};`];
   if (o.indexes) {
-    const idx = await indexDdl(conn, oid);
-    if (idx.length) parts.push('-- Indexes\n' + idx.join('\n'));
+    const idx = list(idxJson);
+    if (idx.length) parts.push('-- Indexes\n' + idx.map((x) => x + ';').join('\n'));
   }
   if (o.comments) {
     const c = [];
-    const tc = (await conn.execute(`SELECT obj_description($1::oid, 'pg_class')`, [oid])).rows[0][0];
     if (tc) c.push(`COMMENT ON TABLE ${target} IS ${lit(tc)};`);
     for (const [col, , , , , comment] of cols) if (comment) c.push(`COMMENT ON COLUMN ${target}.${qi(col)} IS ${lit(comment)};`);
     if (c.length) parts.push('-- Comments\n' + c.join('\n'));
   }
   if (o.triggers) {
-    const tr = (await conn.execute(`SELECT pg_get_triggerdef(oid, true) FROM pg_trigger WHERE tgrelid = $1 AND NOT tgisinternal ORDER BY tgname`, [oid])).rows;
-    if (tr.length) parts.push('-- Triggers\n' + tr.map((x) => x[0] + ';').join('\n'));
+    const tr = list(trJson);
+    if (tr.length) parts.push('-- Triggers\n' + tr.map((x) => x + ';').join('\n'));
   }
   return parts.join('\n\n');
 }
 
-/** Indexes that don't back a constraint (those come with the constraint). */
-async function indexDdl(conn, oid) {
-  const r = await conn.execute(
-    `SELECT pg_get_indexdef(ix.indexrelid) FROM pg_index ix JOIN pg_class i ON i.oid = ix.indexrelid
-      WHERE ix.indrelid = $1 AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = ix.indexrelid AND c.contype IN ('p', 'u', 'x'))
-      ORDER BY i.relname`,
-    [oid]
-  );
-  return r.rows.map((x) => x[0] + ';');
-}
-
-async function relOidOn(conn, schema, name) {
-  const oid = await relOid({ conn }, schema, name);
-  if (oid === null) throw new Error(`${schema}.${name} not found`);
-  return oid;
-}
-
 async function viewDdl(conn, schema, name, type, o) {
   const target = o.schema ? qname(schema, name) : qi(name);
-  const oid = await relOidOn(conn, schema, name);
-  const def = String((await conn.execute(`SELECT pg_get_viewdef($1::oid, true)`, [oid])).rows[0][0] || '').trim().replace(/;$/, '');
   const mat = type === 'MATERIALIZED VIEW';
+  const [viewdef, idxJson, tc] = await relRow(conn, schema, name, [
+    `pg_get_viewdef(c.oid, true)`,
+    mat && o.indexes ? NON_CONSTRAINT_INDEXES : 'NULL',
+    o.comments ? `obj_description(c.oid, 'pg_class')` : 'NULL',
+  ]);
+  const def = String(viewdef || '').trim().replace(/;$/, '');
   const parts = [`${mat ? 'CREATE MATERIALIZED VIEW' : 'CREATE OR REPLACE VIEW'} ${target} AS\n${def};`];
   if (mat && o.indexes) {
-    const idx = await indexDdl(conn, oid);
-    if (idx.length) parts.push('-- Indexes\n' + idx.join('\n'));
+    const idx = list(idxJson);
+    if (idx.length) parts.push('-- Indexes\n' + idx.map((x) => x + ';').join('\n'));
   }
-  if (o.comments) {
-    const tc = (await conn.execute(`SELECT obj_description($1::oid, 'pg_class')`, [oid])).rows[0][0];
-    if (tc) parts.push(`COMMENT ON ${mat ? 'MATERIALIZED VIEW' : 'VIEW'} ${target} IS ${lit(tc)};`);
-  }
+  if (o.comments && tc) parts.push(`COMMENT ON ${mat ? 'MATERIALIZED VIEW' : 'VIEW'} ${target} IS ${lit(tc)};`);
   return parts.join('\n\n');
 }
 
