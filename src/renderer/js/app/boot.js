@@ -13,11 +13,11 @@
     if (mod && !e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); Lookup.commitShortcut(); }
     else if (mod && e.shiftKey && e.key.toLowerCase() === 'l') { e.preventDefault(); Lookup.sqlLogPanel().toggle(); }
     else if (mod && e.shiftKey && e.key.toLowerCase() === 't' && Lookup.isRedis && Lookup.isRedis()) { e.preventDefault(); Lookup.openRedisShell(); }
-    else if (mod && e.key.toLowerCase() === 't') { e.preventDefault(); Lookup.openQueryTab(); }
+    else if (mod && (e.key.toLowerCase() === 't' || (e.key.toLowerCase() === 'e' && !e.shiftKey))) { e.preventDefault(); Lookup.openQueryTab(); } // Ctrl+E or Ctrl+T
     else if (mod && e.key.toLowerCase() === 'w') { e.preventDefault(); if (S.active) Lookup.closeTab(S.active); }
     else if (mod && e.key.toLowerCase() === 'p') { e.preventDefault(); Lookup.openAnything(); }
     else if (mod && !e.altKey && e.key.toLowerCase() === 'r') { e.preventDefault(); if (S.current) Lookup.reconnect(); } // Ctrl+R / Ctrl+Shift+R
-    else if (mod && e.key.toLowerCase() === 'e' && t) {
+    else if (mod && e.shiftKey && e.key.toLowerCase() === 'e' && t) {
       e.preventDefault();
       if (t.kind === 'table' && t.view === 'data') Lookup.exportTable(t);
       else if (t.kind === 'query' && t.resIndex >= 0 && t.results[t.resIndex]) Lookup.exportResult(t, t.results[t.resIndex]);

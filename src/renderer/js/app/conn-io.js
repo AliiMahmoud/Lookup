@@ -205,6 +205,66 @@
     return { ...c, database: path, ...(ssl ? { ssl } : {}) };
   }
 
+  /**
+   * A saved connection -> a connection URL that connFromUrl (and most other tools) can read back, with the name and
+   * environment as ?name=…&env=…. The password is only put in when one is given. Throws when the connection can't be
+   * written as a URL (an Oracle TNS descriptor).
+   */
+  function connToUrl(c, password = '') {
+    const enc = encodeURIComponent;
+    const engine = c.engine || 'oracle';
+    const app = [c.name ? `name=${enc(c.name)}` : '', c.env && c.env !== 'none' ? `env=${c.env}` : ''].filter(Boolean);
+    const withQuery = (url, extra = []) => { const q = [...extra, ...app].filter(Boolean); return q.length ? `${url}${url.includes('?') ? '&' : '?'}${q.join('&')}` : url; };
+    if (engine === 'sqlite') {
+      const file = String(c.file || '');
+      if (!file) throw new Error('This connection has no database file.');
+      return withQuery(`sqlite://${/^[A-Za-z]:/.test(file) ? '/' : ''}${file.replace(/\\/g, '/').split('/').map(enc).join('/').replace(/^([A-Za-z])%3A/, '$1:')}`);
+    }
+    const login = c.user || password ? `${enc(c.user || '')}${password ? ':' + enc(password) : ''}@` : '';
+    const sslMode = { disable: 'disable', prefer: 'prefer', require: 'require', verify: 'verify-full' }[c.ssl];
+    const hostPort = (host, port) => `${String(host).includes(':') ? `[${host}]` : host}${port ? ':' + port : ''}`;
+    if (c.mode === 'string') {
+      const cs = String(c.connectString || '').trim();
+      if (engine === 'oracle') {
+        // EZConnect (host:port/service) can be a URL; a TNS descriptor or alias cannot.
+        const ez = /^(?:\/\/)?([^\s:/()=]+)(?::(\d+))?\/([^\s()=/]+)$/.exec(cs);
+        if (!ez) throw new Error('This connection uses a TNS descriptor or alias, which cannot be written as a URL.');
+        return withQuery(`oracle://${login}${hostPort(ez[1], ez[2] || 1521)}/${enc(ez[3])}`);
+      }
+      const m = /^([a-z][a-z0-9+.-]*):\/\/(?:[^@/?#]*@)?(.*)$/is.exec(cs);
+      if (!m) throw new Error('This connection has no URL to copy.');
+      if (engine === 'clickhouse' && /^https?$/i.test(m[1])) {
+        // Stored as the HTTP address of the server.
+        const [hosts, db = ''] = m[2].split(/[?#]/)[0].split('/');
+        return withQuery(`clickhouse://${login}${hosts}/${db}`, [/^https$/i.test(m[1]) ? 'sslmode=require' : '']);
+      }
+      return withQuery(`${m[1].toLowerCase()}://${login}${m[2]}`);
+    }
+    if (engine === 'mongodb') {
+      const hosts = String(c.host || 'localhost').split(/[\s,]+/).filter(Boolean).map((x) => (c.srv || /:\d+$/.test(x) ? x : `${x}:${c.port || 27017}`));
+      const q = [c.authSource ? `authSource=${enc(c.authSource)}` : '', c.replicaSet ? `replicaSet=${enc(c.replicaSet)}` : '',
+        c.readPreference && c.readPreference !== 'primary' ? `readPreference=${c.readPreference}` : '', c.ssl && c.ssl !== 'disable' ? 'tls=true' : '',
+        c.authMechanism && !['DEFAULT', 'NONE'].includes(c.authMechanism) ? `authMechanism=${c.authMechanism}` : ''];
+      return withQuery(`${c.srv ? 'mongodb+srv' : 'mongodb'}://${c.authMechanism === 'NONE' ? '' : login}${hosts.join(',')}/${enc(c.database || '')}`, q);
+    }
+    const where = hostPort(c.host || 'localhost', c.port || Lookup.ENGINES[engine].port);
+    if (engine === 'oracle') return withQuery(`oracle://${login}${where}/${c.serviceType === 'sid' ? '' : enc(c.service || '')}`, [c.serviceType === 'sid' ? `sid=${enc(c.service || '')}` : '']);
+    if (engine === 'redis') {
+      const tls = c.ssl === 'require' || c.ssl === 'verify';
+      return withQuery(`${tls ? 'rediss' : 'redis'}://${login}${where}/${Number(c.database) || 0}`, [c.ssl === 'verify' ? 'sslmode=verify-full' : '']);
+    }
+    return withQuery(`${engine}://${login}${where}/${enc(c.database || '')}`, [sslMode ? `sslmode=${sslMode}` : '']);
+  }
+
+  /** Right-click → Copy as URL: puts the connection's URL on the clipboard, with its saved password. */
+  async function copyConnUrl(c) {
+    try {
+      const password = c.hasPassword && !c.noPassword ? await api.revealPassword(c.id) : '';
+      await api.copy(connToUrl(c, password));
+      toast(password ? 'URL copied, with the password' : 'URL copied', 'ok');
+    } catch (e) { toast(e.message, 'err'); }
+  }
+
   /** Asks for a connection URL and opens the New connection form filled in from it (nothing is saved yet). */
   function importFromUrl() {
     const input = h('input', { class: 'input mono', placeholder: 'oracle://user:password@host:1521/service', spellcheck: 'false', autocomplete: 'off' });
@@ -333,8 +393,7 @@
       body: h('div', { class: 'cx-body' },
         h('label', { class: 'check' }, include, h('span', null, anyPw ? 'Include passwords' : 'Include passwords (no saved passwords)')),
         pwRow,
-        h('p', { class: 'muted cx-note' }, 'Saved as Oracle SQL Developer XML. Passwords are encrypted with this password; Lookup asks for it on import. SQL Developer imports the connections without passwords.'
-          + (conns.some((c) => c.engine && c.engine !== 'oracle') ? ' PostgreSQL, MySQL, SQLite, ClickHouse, Redis and MongoDB connections are included for Lookup; SQL Developer can\'t open them.' : '')),
+        h('p', { class: 'muted cx-note' }, 'Saved as an XML file. Passwords are encrypted with this password; Lookup asks for it on import.'),
         status),
       actions: [{ label: 'Cancel' }, {
         label: 'Save…', kind: 'primary',
@@ -355,5 +414,5 @@
     setTimeout(() => (include.checked ? pw.focus() : null), 0);
   }
 
-  Object.assign(Lookup, { importConnections, exportConnections, importFromUrl, connFromUrl, readSqlDevFile, toLookup, toSqlDevXml });
+  Object.assign(Lookup, { importConnections, exportConnections, importFromUrl, connFromUrl, connToUrl, copyConnUrl, readSqlDevFile, toLookup, toSqlDevXml });
 })();

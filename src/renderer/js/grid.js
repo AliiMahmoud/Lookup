@@ -3,6 +3,7 @@
   const { h, icon, cellText, contextMenu, modal } = window.U;
   const ROW_H = 26;
   const OVERSCAN = 12;
+  const STEP = 10; // rows are rebuilt each time the view has scrolled this many rows, not on every row
 
   function initialWidth(col, rows, i) {
     let n = Math.max(col.name.length + 3, 6);
@@ -135,40 +136,63 @@
       const top = this.el.scrollTop;
       const vh = this.el.clientHeight || 600;
       const n = this.total;
-      const first = Math.max(0, Math.floor(top / ROW_H) - OVERSCAN);
-      const last = Math.min(n, Math.ceil((top + vh) / ROW_H) + OVERSCAN);
-      if (this.painted && this.painted[0] === first && this.painted[1] === last && !this.dirty) return;
+      const first = Math.max(0, Math.floor((top / ROW_H - OVERSCAN) / STEP) * STEP);
+      const last = Math.min(n, Math.ceil(((top + vh) / ROW_H + OVERSCAN) / STEP) * STEP);
+      const old = this.painted;
+      if (old && old[0] === first && old[1] === last && !this.dirty) return;
       this.painted = [first, last];
+      const kids = this.tbody.children;
+      // Scrolled a little: keep the rows still in range and only add / remove at the ends.
+      if (old && !this.dirty && first < old[1] && last > old[0] && kids.length === old[1] - old[0] + 2) {
+        const [topSpacer, bottomSpacer] = [kids[0], kids[kids.length - 1]];
+        for (let vi = old[0]; vi < first; vi++) topSpacer.nextSibling.remove();
+        for (let vi = old[1]; vi > last; vi--) bottomSpacer.previousSibling.remove();
+        if (first < old[0]) {
+          const frag = document.createDocumentFragment();
+          for (let vi = first; vi < old[0]; vi++) frag.append(this.buildRow(vi));
+          topSpacer.after(frag);
+        }
+        if (last > old[1]) {
+          const frag = document.createDocumentFragment();
+          for (let vi = old[1]; vi < last; vi++) frag.append(this.buildRow(vi));
+          bottomSpacer.before(frag);
+        }
+        topSpacer.style.height = first * ROW_H + 'px';
+        bottomSpacer.style.height = (n - last) * ROW_H + 'px';
+        return;
+      }
       this.dirty = false;
       const frag = document.createDocumentFragment();
       frag.append(h('tr', { class: 'spacer', style: { height: first * ROW_H + 'px' } }));
-      const startNo = this.o.startIndex || 0;
-      for (let vi = first; vi < last; vi++) {
-        const { data, index } = this.rowAt(vi);
-        const edits = index >= 0 ? this.edits.get(index) : null;
-        const cls = ['r'];
-        if (index < 0) cls.push('ins');
-        if (this.deleted.has(index)) cls.push('del');
-        if (this.isRowSelected(vi)) cls.push('sel');
-        if (this.isFullRow(vi)) cls.push('full');
-        const tr = h('tr', { class: cls.join(' '), 'data-vi': vi });
-        tr.append(h('td', { class: 'rn' }, index < 0 ? '+' : startNo + vi + 1));
-        for (let c = 0; c < this.columns.length; c++) {
-          const v = edits && c in edits ? edits[c] : data[c];
-          const tdc = [];
-          if (v === null || v === undefined) tdc.push('null');
-          if (this.columns[c].kind === 'number') tdc.push('num');
-          if (edits && c in edits) tdc.push('edited');
-          if (this.isCellSelected(vi, c)) tdc.push('in-sel');
-          if (this.sel.r === vi && this.sel.c === c) tdc.push('cur');
-          const t = cellText(v);
-          tr.append(h('td', { class: tdc.join(' '), 'data-c': c }, t.length > 400 ? t.slice(0, 400) + '…' : t));
-        }
-        frag.append(tr);
-      }
+      for (let vi = first; vi < last; vi++) frag.append(this.buildRow(vi));
       frag.append(h('tr', { class: 'spacer', style: { height: (n - last) * ROW_H + 'px' } }));
       this.tbody.innerHTML = '';
       this.tbody.append(frag);
+    }
+
+    buildRow(vi) {
+      const startNo = this.o.startIndex || 0;
+      const { data, index } = this.rowAt(vi);
+      const edits = index >= 0 ? this.edits.get(index) : null;
+      const cls = ['r'];
+      if (index < 0) cls.push('ins');
+      if (this.deleted.has(index)) cls.push('del');
+      if (this.isRowSelected(vi)) cls.push('sel');
+      if (this.isFullRow(vi)) cls.push('full');
+      const tr = h('tr', { class: cls.join(' '), 'data-vi': vi });
+      tr.append(h('td', { class: 'rn' }, index < 0 ? '+' : startNo + vi + 1));
+      for (let c = 0; c < this.columns.length; c++) {
+        const v = edits && c in edits ? edits[c] : data[c];
+        const tdc = [];
+        if (v === null || v === undefined) tdc.push('null');
+        if (this.columns[c].kind === 'number') tdc.push('num');
+        if (edits && c in edits) tdc.push('edited');
+        if (this.isCellSelected(vi, c)) tdc.push('in-sel');
+        if (this.sel.r === vi && this.sel.c === c) tdc.push('cur');
+        const t = cellText(v);
+        tr.append(h('td', { class: tdc.join(' '), 'data-c': c }, t.length > 400 ? t.slice(0, 400) + '…' : t));
+      }
+      return tr;
     }
 
     refresh() { this.dirty = true; this.paint(); }

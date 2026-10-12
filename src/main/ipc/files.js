@@ -78,7 +78,7 @@ handle('conn:saveFile', async (winId, text) => {
   const { canceled, filePath } = await dialog.showSaveDialog(winFor(winId), {
     title: 'Export connections',
     defaultPath: 'connections.xml',
-    filters: [{ name: 'SQL Developer connections', extensions: ['xml'] }],
+    filters: [{ name: 'Connections', extensions: ['xml'] }],
   });
   if (canceled || !filePath) return null;
   fs.writeFileSync(filePath, String(text), 'utf8');

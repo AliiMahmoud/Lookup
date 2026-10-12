@@ -52,6 +52,7 @@
       if (!items.length) list.append(h('div', { class: 'empty-small' }, S.connections.length ? 'No matches' : 'No saved connections yet'));
       items.forEach((c) => {
         const env = ENVS[c.env || 'none'];
+        const editConn = () => { S.selectedConn = { ...c, keepPassword: true, password: '' }; renderWelcome(); };
         list.append(h('div', {
           class: 'conn-item' + (S.selectedConn && S.selectedConn.id === c.id ? ' sel' : ''),
           ondblclick: () => connectTo(c.id),
@@ -74,8 +75,10 @@
             contextMenu(e.clientX, e.clientY, [
               { label: 'Connect', icon: 'plug', onClick: () => connectTo(c.id) },
               { label: 'Connect in a new tab', icon: 'window', onClick: () => (api.openConnection ? api.openConnection(c.id) : api.newWindow()) },
-              { label: 'Edit', icon: 'edit', onClick: () => { S.selectedConn = { ...c, keepPassword: true, password: '' }; renderWelcome(); } },
+              { label: 'Edit', icon: 'edit', onClick: editConn },
               { label: 'Duplicate', icon: 'copy', onClick: () => { S.selectedConn = { ...c, id: null, name: c.name + ' copy', password: '', keepPassword: false }; renderWelcome(); } },
+              '-',
+              { label: 'Copy as URL', icon: 'link', onClick: () => Lookup.copyConnUrl(c) },
               '-',
               { label: 'Delete', icon: 'trash', danger: true, onClick: () => deleteConn(c) },
             ]);
@@ -83,8 +86,10 @@
         },
         h('span', { class: 'conn-badge engine', style: { '--c': Lookup.engineOf(c).color }, title: Lookup.engineOf(c).label }, Lookup.initials(c)),
         h('div', { class: 'conn-item-text' },
-          h('div', { class: 'conn-item-name' }, c.name || '(unnamed)', c.env && c.env !== 'none' ? h('span', { class: 'env-tag', style: { '--c': env.color } }, env.label) : null),
-          h('div', { class: 'conn-item-sub' }, Lookup.target(c)))));
+          h('div', { class: 'conn-item-name' }, h('span', null, c.name || '(unnamed)'), c.env && c.env !== 'none' ? h('span', { class: 'env-tag', style: { '--c': env.color } }, env.label) : null),
+          h('div', { class: 'conn-item-sub' }, Lookup.target(c))),
+        h('button', { class: 'icon-btn xs conn-edit', title: 'Edit', draggable: 'false', ondblclick: (e) => e.stopPropagation(),
+          onclick: (e) => { e.stopPropagation(); editConn(); } }, icon('edit'))));
       });
     };
     paintList();
@@ -93,7 +98,7 @@
         h('div', null, h('h1', null, 'Connections'), h('p', { class: 'muted' }, 'Double-click to connect')),
         h('div', { class: 'welcome-actions' },
           h('button', { class: 'tool', title: 'Import connections from an Oracle SQL Developer export (.xml or .json)', onclick: () => Lookup.importConnections() }, icon('open')),
-          h('button', { class: 'tool', title: 'Export connections for Oracle SQL Developer (.xml), optionally with passwords', disabled: !S.connections.length, onclick: () => Lookup.exportConnections() }, icon('download')),
+          h('button', { class: 'tool', title: 'Export connections to a file (.xml), optionally with passwords', disabled: !S.connections.length, onclick: () => Lookup.exportConnections() }, icon('download')),
           h('button', { class: 'tool', title: 'New connection from a URL (oracle://user:password@host/service, postgres://…, mysql://…)', onclick: () => Lookup.importFromUrl() }, icon('link')),
           h('button', { class: 'btn primary sm', onclick: () => { S.selectedConn = { choosing: true }; renderWelcome(); } }, icon('plus'), 'New'))),
       search, list);
@@ -132,12 +137,14 @@
     }, h('span', { class: 'choose-logo' }, e.badge), h('span', { class: 'choose-name' }, e.label), h('span', { class: 'choose-blurb' }, e.blurb)));
     const go = (id) => { S.lastEngine = id; S.selectedConn = blankConn(id); renderWelcome(); };
     const box = h('div', { class: 'choose' },
-      h('h2', null, 'New connection'),
-      h('p', { class: 'muted choose-sub' }, 'Choose the database you want to connect to'),
-      h('div', { class: 'choose-cards' }, cards),
-      h('div', { class: 'choose-actions' },
-        h('button', { type: 'button', class: 'btn', onclick: () => { S.selectedConn = null; renderWelcome(); } }, 'Cancel'),
-        h('button', { type: 'button', class: 'btn primary', onclick: () => go(picked) }, 'Continue')));
+      h('div', { class: 'choose-head' },
+        h('div', null,
+          h('h2', null, 'New connection'),
+          h('p', { class: 'muted choose-sub' }, 'Choose the database you want to connect to')),
+        h('div', { class: 'choose-actions' },
+          h('button', { type: 'button', class: 'btn', onclick: () => { S.selectedConn = null; renderWelcome(); } }, 'Cancel'),
+          h('button', { type: 'button', class: 'btn primary', onclick: () => go(picked) }, 'Continue'))),
+      h('div', { class: 'choose-cards' }, cards));
     box.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); S.selectedConn = null; renderWelcome(); }
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
@@ -163,7 +170,7 @@
         row(['Double-click'], 'Connect'),
         row(['Right-click'], 'Edit connection'),
         row([mod, 'N'], 'Open a connection'),
-        row([mod, 'T'], 'New query'),
+        row([mod, 'E'], 'New query'),
         row([mod, 'P'], 'Open anything'),
         row([mod, 'Enter'], 'Run statement'),
         row([mod, 'S'], 'Commit'),
@@ -326,6 +333,19 @@
       pw.focus();
     });
     const pwBox = h('div', { class: 'pw-wrap' }, pw, eye);
+    // "Connect without a password": the password box is switched off and connecting never asks for one.
+    const savePwChk = chk('savePassword', 'Save password (encrypted)');
+    const noPwChk = chk('noPassword', 'Connect without a password');
+    const paintNoPw = () => {
+      const off = !!f.noPassword;
+      if (off) { pw.value = ''; f.password = ''; f.keepPassword = false; }
+      pw.disabled = off; eye.disabled = off;
+      pw.placeholder = off ? 'No password' : f.keepPassword && c.hasPassword ? '•••••••• (saved)' : '';
+      savePwChk.firstChild.disabled = off;
+      savePwChk.classList.toggle('off', off);
+    };
+    noPwChk.firstChild.addEventListener('change', () => { paintNoPw(); if (!f.noPassword) pw.focus(); });
+    paintNoPw();
 
     const status = h('div', { class: 'form-status' });
     const collect = () => {
@@ -333,7 +353,8 @@
         const { id, name, env, file, readOnly, autoCommit } = f;
         return { id, name, env, engine: engine.id, file: String(file || '').trim(), readOnly: !!readOnly, autoCommit: !!autoCommit, savePassword: false, mode: 'basic' };
       }
-      const out = { ...f, port: Number(f.port) || engine.port };
+      const out = { ...f, port: Number(f.port) || engine.port, noPassword: !!f.noPassword };
+      if (out.noPassword) { out.password = ''; out.keepPassword = false; }
       if (oracle) { delete out.database; delete out.ssl; } else { delete out.service; delete out.serviceType; delete out.role; }
       if (noTx) out.autoCommit = true;
       if (redis) { out.database = Math.max(0, Math.floor(Number(f.database) || 0)); out.readOnly = !!f.readOnly; }
@@ -408,9 +429,10 @@
       oracle
         ? h('div', { class: 'grid2' },
           field('Role', sel('role', [['DEFAULT', 'Default'], ['SYSDBA', 'SYSDBA'], ['SYSOPER', 'SYSOPER'], ['SYSBACKUP', 'SYSBACKUP']])),
-          h('div', { class: 'field checks' }, chk('savePassword', 'Save password (encrypted)'), chk('autoCommit', 'Auto-commit by default')))
+          h('div', { class: 'field checks' }, savePwChk, noPwChk, chk('autoCommit', 'Auto-commit by default')))
         : h('div', { class: 'checks-row' },
-          fileBased ? null : chk('savePassword', 'Save password (encrypted)'),
+          fileBased ? null : savePwChk,
+          fileBased ? null : noPwChk,
           redis ? chk('readOnly', 'Read-only (block write commands)')
             : mongo ? chk('readOnly', 'Read-only (block changes)')
             : noTx ? h('span', { class: 'muted' }, 'ClickHouse has no transactions: every statement is applied at once.') : chk('autoCommit', 'Auto-commit by default')),
@@ -451,7 +473,7 @@
     Lookup.pushState();
     let password;
     const optional = Lookup.engineOf(c).passwordOptional && !c.user; // Redis: many servers have no password
-    if (c && !c.hasPassword && !Lookup.engineOf(c).file && !optional) {
+    if (c && !c.hasPassword && !c.noPassword && !Lookup.engineOf(c).file && !optional) {
       password = await askPassword(c);
       if (password === null) { S.connecting = null; Lookup.pushState(); return; }
     }

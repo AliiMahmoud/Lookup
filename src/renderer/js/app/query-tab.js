@@ -266,7 +266,7 @@
         h('span', { class: 'pager-info' }, `${fmtNum(r.rows.length)} row${r.rows.length === 1 ? '' : 's'}${r.truncated ? ' (limit reached)' : ''}`),
         h('span', { class: 'muted' }, fmtMs(r.ms)),
         h('div', { class: 'spacer' }),
-        h('button', { class: 'btn sm ghost', title: 'Export results (Ctrl+E)', onclick: () => Lookup.exportResult(tab, r) }, icon('download'), 'Export'));
+        h('button', { class: 'btn sm ghost', title: 'Export results (Ctrl+Shift+E)', onclick: () => Lookup.exportResult(tab, r) }, icon('download'), 'Export'));
     } else {
       const box = h('div', { class: 'messages scroll' });
       tab.results.forEach((r) => {

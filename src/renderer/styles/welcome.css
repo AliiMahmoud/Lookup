@@ -5,9 +5,9 @@
 .welcome-left {
   width: var(--welcome-w, 420px); flex: 0 0 var(--welcome-w, 420px); max-width: calc(100% - 360px); min-width: 260px;
   display: flex; flex-direction: column; gap: 10px;
-  padding: 22px 16px 16px; background: var(--side);
+  padding: 22px 16px 16px; background: var(--side); container-type: inline-size;
 }
-.welcome-head { display: flex; align-items: flex-start; justify-content: space-between; padding: 0 4px 4px; }
+.welcome-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 0 4px 4px; }
 .welcome-head h1 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
 .welcome-head p { margin: 2px 0 0; font-size: 12px; }
 .conn-list { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 2px; margin: 0 -4px; padding: 0 4px; }
@@ -28,8 +28,14 @@
   color: var(--c); background: color-mix(in srgb, var(--c) 15%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 30%, transparent);
 }
-.conn-item-text { min-width: 0; }
+.conn-item-text { min-width: 0; flex: 1; }
+/* Edit (pencil) at the right of each connection: faint until the row is pointed at */
+.conn-edit { flex: 0 0 22px; opacity: .35; }
+.conn-item:hover .conn-edit, .conn-item.sel .conn-edit, .conn-edit:focus-visible { opacity: 1; }
 .conn-item-name { font-weight: 600; display: flex; align-items: center; white-space: nowrap; }
+/* A long name is cut with …; the environment tag after it always stays whole */
+.conn-item-name > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.conn-item-name .env-tag { flex: none; }
 .conn-item-sub { color: var(--muted); font-size: 11.5px; font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .welcome-right { flex: 1; overflow: auto; display: flex; justify-content: center; padding: 34px 28px; }
 .conn-form { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 14px; }
@@ -70,6 +76,12 @@
 /* Import / export buttons next to New, and the import preview */
 .welcome-actions { display: flex; align-items: center; gap: 2px; }
 .welcome-actions .btn { margin-left: 6px; }
+/* Narrow panel: the buttons move under the title instead of leaving the panel (import / export on the left, from URL and New on the right) */
+@container (max-width: 340px) {
+  .welcome-head > :first-child { flex: 1 0 100%; }
+  .welcome-actions { flex: 1 0 100%; }
+  .welcome-actions .tool:has(+ .btn) { margin-left: auto; }
+}
 .imp-note { margin: 0 0 10px; font-size: 12px; }
 .imp-list { max-height: 50vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
 .imp-row input { accent-color: var(--accent); }
@@ -119,7 +131,8 @@
 /* New connection: choose the database first */
 .choose { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 14px; }
 .choose h2 { margin: 0; font-size: 17px; font-weight: 650; }
-.choose-sub { margin: -8px 0 4px; font-size: 13px; }
+.choose-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.choose-sub { margin: 6px 0 4px; font-size: 13px; }
 .choose-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .choose-card {
   display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 22px 14px 18px;
@@ -134,8 +147,9 @@
 }
 .choose-name { font-size: 14px; font-weight: 650; }
 .choose-blurb { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
-.choose-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border); }
-.checks-row { display: flex; gap: 22px; align-items: center; }
+.choose-actions { display: flex; gap: 8px; margin-left: auto; }
+.checks-row { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; }
+.check.off { opacity: .5; }
 .file-row { display: flex; gap: 6px; }
 .file-row .input { flex: 1; min-width: 0; font-family: var(--mono); font-size: 12px; }
 

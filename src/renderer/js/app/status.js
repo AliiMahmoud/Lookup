@@ -50,7 +50,7 @@
         h('span', { class: 'conn-pill-meta' }, S.info.schema)),
       h('div', { class: 'tb-spacer' }),
       h('div', { class: 'tb-actions no-drag' },
-        h('button', { class: 'tb-btn', title: 'New query (Ctrl+T)', onclick: () => Lookup.openQueryTab() }, icon('code'), h('span', null, 'SQL')),
+        h('button', { class: 'tb-btn', title: 'New query (Ctrl+E)', onclick: () => Lookup.openQueryTab() }, icon('code'), h('span', null, 'SQL')),
         h('button', { class: 'tb-btn', title: 'Open anything (Ctrl+P)', onclick: () => Lookup.openAnything() }, icon('search')),
         h('div', { class: 'tb-sep' }),
         h('button', {

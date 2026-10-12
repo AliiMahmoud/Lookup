@@ -107,7 +107,7 @@
       }, icon(t.icon), titleEl,
       h('button', { class: 'tab-x', title: 'Close', onmousedown: (e) => e.stopPropagation(), onclick: (e) => { e.stopPropagation(); closeTab(t.id); } }, icon('x'))));
     });
-    bar.append(h('button', { class: 'tab-new', title: 'New query (Ctrl+T)', onclick: () => Lookup.openQueryTab() }, icon('plus')));
+    bar.append(h('button', { class: 'tab-new', title: 'New query (Ctrl+E)', onclick: () => Lookup.openQueryTab() }, icon('plus')));
     $('#empty-state').classList.toggle('hidden', S.tabs.length > 0);
     paintTabState();
   }

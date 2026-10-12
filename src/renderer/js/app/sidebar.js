@@ -26,7 +26,8 @@
     sb.append(
       h('div', { class: 'sb-top' },
         h('div', { class: 'sb-row' }, icon('db'), schemaSel,
-          h('button', { class: 'icon-btn', title: 'Refresh objects', onclick: () => loadObjects(true) }, icon('refresh'))),
+          h('button', { class: 'icon-btn', title: 'Refresh objects', onclick: () => loadObjects(true) }, icon('refresh')),
+          Lookup.feature('createTable') ? h('button', { class: 'icon-btn', title: 'New table', onclick: () => Lookup.openCreateTable() }, icon('plus')) : null),
         h('div', { class: 'sb-search' }, icon('search'), filter, clearBtn)),
       h('div', { class: 'tree', id: 'tree' }));
   }

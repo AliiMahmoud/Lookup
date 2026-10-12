@@ -240,12 +240,12 @@ On a Mac, `⌘` works in place of `Ctrl`.
 | Keys                              | Action                           |
 | --------------------------------- | -------------------------------- |
 | `Ctrl+N`                          | Open a connection                |
-| `Ctrl+T` / `Ctrl+W`               | New query tab / close tab        |
+| `Ctrl+E` or `Ctrl+T` / `Ctrl+W`   | New query tab / close tab        |
 | `Ctrl+P`                          | Open anything                    |
 | `Ctrl+Enter` / `Ctrl+Shift+Enter` | Run statement / run all          |
 | `Ctrl+B`                          | Beautify SQL                     |
 | `Ctrl+S`                          | Commit, or apply pending changes |
-| `Ctrl+E`                          | Export                           |
+| `Ctrl+Shift+E`                    | Export                           |
 | `Ctrl+R`                          | Reconnect                        |
 | `Ctrl+Shift+L`                    | Show / hide the SQL log          |
 | `Ctrl+F` / `F5`                   | Filter / refresh a table         |

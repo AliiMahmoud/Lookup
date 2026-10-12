@@ -22,31 +22,39 @@
 
   const TOKEN = /(--[^\n]*|\/\*[\s\S]*?(?:\*\/|$))|([qQ]'\[[\s\S]*?(?:\]'|$)|'(?:[^']|'')*'?)|("(?:[^"]|"")*"?)|(\b\d+(?:\.\d+)?\b)|(:[A-Za-z_][\w$#]*)|([A-Za-z_][\w$#]*)/g;
 
-  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const esc = (s) => (/[&<>]/.test(s) ? s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : s);
 
-  function highlight(text) {
+  /** Highlighted HTML, one string per line; a token that spans lines (block comment, string) is closed and reopened on each. */
+  function highlightLines(text) {
     let out = '';
     let last = 0;
     TOKEN.lastIndex = 0;
     let m;
+    const span = (cls, raw) => (raw.includes('\n')
+      ? raw.split('\n').map((part) => (part ? `<span class="${cls}">${esc(part)}</span>` : '')).join('\n')
+      : `<span class="${cls}">${esc(raw)}</span>`);
     while ((m = TOKEN.exec(text))) {
       out += esc(text.slice(last, m.index));
-      const s = esc(m[0]);
-      if (m[1]) out += `<span class="t-com">${s}</span>`;
-      else if (m[2]) out += `<span class="t-str">${s}</span>`;
-      else if (m[3]) out += `<span class="t-id">${s}</span>`;
-      else if (m[4]) out += `<span class="t-num">${s}</span>`;
-      else if (m[5]) out += `<span class="t-bind">${s}</span>`;
+      if (m[1]) out += span('t-com', m[0]);
+      else if (m[2]) out += span('t-str', m[0]);
+      else if (m[3]) out += span('t-id', m[0]);
+      else if (m[4]) out += span('t-num', m[0]);
+      else if (m[5]) out += span('t-bind', m[0]);
       else {
         const up = m[0].toUpperCase();
-        if (KEYWORDS.has(up)) out += `<span class="t-kw">${s}</span>`;
-        else if (FUNCS.has(up)) out += `<span class="t-fn">${s}</span>`;
-        else out += s;
+        if (KEYWORDS.has(up)) out += span('t-kw', m[0]);
+        else if (FUNCS.has(up)) out += span('t-fn', m[0]);
+        else out += esc(m[0]);
       }
       last = TOKEN.lastIndex;
     }
-    return out + esc(text.slice(last)) + '\n ';
+    return (out + esc(text.slice(last))).split('\n');
   }
+
+  const highlight = (text) => highlightLines(text).join('\n') + '\n ';
+
+  // The highlight layer holds only the lines near the viewport, redrawn each time the view has scrolled this many lines.
+  const HL_STEP = 20;
 
   class SqlEditor {
     constructor({ value = '', onChange, onRun, onRunAll, onSave, onSaveFile, onFormat, completions }) {
@@ -67,6 +75,8 @@
       this.el = h('div', { class: 'editor' }, this.gutter, this.code);
       this.lines = 0;
       this.ac = null;
+      this.viewH = 0; // editor height, kept by the observer below (0 until the editor is on screen)
+      new ResizeObserver(() => { this.viewH = this.ta.clientHeight; this.sync(); }).observe(this.ta);
 
       this.ta.addEventListener('input', (e) => {
         this.render();
@@ -118,8 +128,9 @@
     }
 
     render() {
-      this.pre.innerHTML = highlight(this.ta.value);
-      const n = this.ta.value.split('\n').length;
+      const v = this.ta.value;
+      if (v !== this.hlText) { this.hlText = v; this.hl = highlightLines(v); this.hlRange = null; }
+      const n = this.hl.length;
       if (n !== this.lines) {
         this.lines = n;
         let s = '';
@@ -132,7 +143,15 @@
 
     sync() {
       const { scrollTop: t, scrollLeft: l } = this.ta;
-      this.pre.style.transform = `translate(${-l}px, ${-t}px)`;
+      // Only the lines around the viewport are in the highlight layer (a long script would be re-laid out on every key).
+      const lh = Math.round(20 * this.zoom / 100);
+      const first = Math.max(0, (Math.floor(t / lh / HL_STEP) - 1) * HL_STEP);
+      const last = Math.min(this.hl.length, first + Math.ceil((this.viewH || 1200) / lh) + 3 * HL_STEP);
+      if (!this.hlRange || this.hlRange[0] !== first || this.hlRange[1] !== last) {
+        this.hlRange = [first, last];
+        this.pre.innerHTML = this.hl.slice(first, last).join('\n') + '\n ';
+      }
+      this.pre.style.transform = `translate(${-l}px, ${first * lh - t}px)`;
       this.gutter.style.transform = `translateY(${-t}px)`;
     }
 

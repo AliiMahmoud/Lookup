@@ -28,7 +28,7 @@
       h('button', { class: 'tool', title: 'Refresh (F5)', onclick: () => tab.reload() }, icon('refresh')),
       type === 'TABLE' && Lookup.feature('editRows') ? h('button', { class: 'tool edit-tool', title: 'Add row', onclick: () => tab.grid && tab.grid.addRow() }, icon('plus')) : null,
       type === 'TABLE' && Lookup.feature('editRows') ? h('button', { class: 'tool edit-tool', title: 'Delete selected rows (Del)', onclick: () => tab.grid && tab.grid.deleteRows(tab.grid.selectedVisualRows()) }, icon('trash')) : null,
-      h('button', { class: 'tool', title: 'Export… (Ctrl+E)', onclick: () => Lookup.exportTable(tab) }, icon('download')),
+      h('button', { class: 'tool', title: 'Export… (Ctrl+Shift+E)', onclick: () => Lookup.exportTable(tab) }, icon('download')),
       h('button', { class: 'tool', title: 'Row details', onclick: () => { tab.showDetails = !tab.showDetails; tab.paintDetails(); } }, icon('panel')));
     const toolbar = h('div', { class: 'toolbar' }, seg, dataTools, h('div', { class: 'spacer' }), changesBox);
     const filterBox = h('div', { class: 'filters hidden' });
