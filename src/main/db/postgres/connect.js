@@ -35,6 +35,15 @@ function clientOptions(cfg, ssl) {
 
 const NO_SSL = /does not support SSL/i;
 
+/** Adds the server's DETAIL / HINT / CONTEXT lines to the message, as psql shows them (once per error). */
+function withDetails(e) {
+  if (!e || e.detailed || !e.severity) return e;
+  e.detailed = true;
+  const extra = [['Detail', e.detail], ['Hint', e.hint], ['Context', e.where]].filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`);
+  if (extra.length) e.message += '\n' + extra.join('\n');
+  return e;
+}
+
 /**
  * Wraps a connected pg Client. Calls are queued one at a time (lock), so the savepoints that
  * protect an open transaction never interleave with another call on the same session.
@@ -63,7 +72,11 @@ class PgConn {
 
   async query(sql, params) {
     if (this.broken) throw this.broken;
-    return this.client.query({ text: sql, values: params || [], rowMode: 'array' });
+    try {
+      return await this.client.query({ text: sql, values: params || [], rowMode: 'array' });
+    } catch (e) {
+      throw withDetails(e);
+    }
   }
 
   /** App-issued SQL (logged). Inside an open transaction a savepoint keeps a failed call from
@@ -165,4 +178,4 @@ function cfgForDatabase(base, db) {
   return { ...base, connectString: url.toString() };
 }
 
-module.exports = { open, targetKey, cfgForDatabase, clientOptions, DEFAULT_PORT };
+module.exports = { open, targetKey, cfgForDatabase, clientOptions, withDetails, DEFAULT_PORT };

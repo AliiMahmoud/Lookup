@@ -3,6 +3,7 @@
 // (like Oracle), and every statement inside a transaction is protected by a savepoint: a failing
 // statement is undone on its own instead of aborting the whole transaction (as psql's ON_ERROR_ROLLBACK).
 const { driver } = require('./driver');
+const { withDetails } = require('./connect');
 const { columnsFromFields, serializeRows } = require('./values');
 
 const TX_CONTROL = /^\s*(begin|start\s+transaction|commit|end|rollback|abort|savepoint|release|prepare\s+transaction)\b/i;
@@ -20,7 +21,7 @@ function opensTransaction(sql) {
 /** Error position (1-based, in characters) -> offset in the statement, for the editor cursor. */
 function withOffset(e) {
   if (e && e.position && e.offset === undefined) e.offset = Number(e.position) - 1;
-  return e;
+  return withDetails(e);
 }
 
 async function readRows(cur, maxRows, g) {
