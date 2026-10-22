@@ -63,6 +63,23 @@ Screenshots of the running app, taken against the sample databases in [test/dock
 
 
 
+### Download
+
+Get the latest build from the **[latest release](https://github.com/AliiMahmoud/Lookup/releases/latest)** page:
+
+| Platform                      | File                                 |
+| ----------------------------- | ------------------------------------ |
+| Windows (installer)           | `Lookup.Setup.<version>.exe`         |
+| Windows (portable, no install) | `Lookup-<version>-win.-.portable.zip` |
+| macOS (Apple Silicon)         | `Lookup-<version>-arm64.dmg`         |
+| macOS (Intel)                 | `Lookup-<version>.dmg`               |
+
+The builds are not code-signed. On Windows, SmartScreen asks before the first run ("More info" → "Run anyway"). On macOS, if the app is reported as damaged or from an unidentified developer, right-click it in Applications and choose **Open**, or run `xattr -cr /Applications/Lookup.app`.
+
+To run from source or build it yourself instead, read on.
+
+
+
 ### Requirements
 
 - **Node.js 20 or later** (it comes with npm) and **Git**
@@ -107,7 +124,7 @@ Saved passwords are still encrypted with the Windows account that saved them, so
 
 ### macOS and Linux
 
-Run from source as above. No packaged macOS or Linux build is set up yet.
+macOS builds are on the [latest release](https://github.com/AliiMahmoud/Lookup/releases/latest) page (see [Download](#download)). On Linux, run from source as above; no packaged Linux build is set up yet.
 
 ### Sample databases to try it with (optional)
 
