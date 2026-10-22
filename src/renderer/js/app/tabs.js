@@ -35,6 +35,7 @@
     if (!t) return;
     if (t.grid && t.grid.changeCount() && !(await confirmBox('Discard changes?', `${t.name} has ${t.grid.changeCount()} uncommitted edit(s).`, 'Discard', true))) return;
     if (!force && t.isDirty && t.isDirty() && !(await confirmBox(t.kind === 'create' ? 'Discard new table?' : 'Discard structure changes?', t.kind === 'create' ? `${t.title} has not been created yet.` : `${t.name} has structure changes that were not applied.`, 'Discard', true))) return;
+    t.closed = true; // closed by the user (not put away on disconnect)
     t.destroy && t.destroy();
     t.el.remove();
     const i = S.tabs.indexOf(t);
@@ -78,6 +79,8 @@
     const cur = bar.querySelector('.tab.active');
     if (cur) cur.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
+  /** Table tabs keep the table's name, and Persisted Queries its own. */
+  const canRename = (t) => t.kind !== 'table' && !t.persisted;
   function renderTabs() {
     const bar = $('#tabbar');
     bar.innerHTML = '';
@@ -91,13 +94,13 @@
           if (e.target.closest('.tab-rename')) return;
           if (e.button === 1) { e.preventDefault(); closeTab(t.id); } else if (e.button === 0 && S.active !== t.id) activate(t.id);
         },
-        ondblclick: (e) => { if (!e.target.closest('.tab-x')) startRename(t, titleEl); },
+        ondblclick: (e) => { if (!e.target.closest('.tab-x') && canRename(t)) startRename(t, titleEl); },
         oncontextmenu: (e) => {
           e.preventDefault();
           contextMenu(e.clientX, e.clientY, [
-            { label: 'Rename', icon: 'edit', hint: 'Double-click', onClick: () => startRename(t, titleEl) },
-            t.title !== t.defaultTitle && t.defaultTitle ? { label: 'Reset name', onClick: () => setTabTitle(t, t.defaultTitle) } : null,
-            '-',
+            canRename(t) ? { label: 'Rename', icon: 'edit', hint: 'Double-click', onClick: () => startRename(t, titleEl) } : null,
+            canRename(t) && t.title !== t.defaultTitle && t.defaultTitle ? { label: 'Reset name', onClick: () => setTabTitle(t, t.defaultTitle) } : null,
+            canRename(t) ? '-' : null,
             { label: 'Close', icon: 'x', hint: 'Ctrl+W', onClick: () => closeTab(t.id) },
             { label: 'Close other tabs', disabled: S.tabs.length < 2, onClick: () => closeTabs(S.tabs.filter((x) => x.id !== t.id)) },
             { label: 'Close tabs to the right', disabled: S.tabs.indexOf(t) === S.tabs.length - 1, onClick: () => closeTabs(S.tabs.slice(S.tabs.indexOf(t) + 1)) },

@@ -110,6 +110,16 @@ class JsonWriter {
 }
 
 // ---------- SQL INSERT ----------
+/** One row as an INSERT statement (with ;). onSkip() is called for each binary too large to write. */
+function insertStatement(d, target, columns, row, onSkip) {
+  const vals = [];
+  for (let i = 0; i < columns.length; i++) {
+    const lit = d.sqlLiteral(row[i], columns[i].type);
+    if (lit === null) { vals.push('NULL /* binary too large */'); if (onSkip) onSkip(); } else vals.push(lit);
+  }
+  return `INSERT INTO ${target} (${columns.map((c) => d.qi(c.name)).join(', ')}) VALUES (${vals.join(', ')});`;
+}
+
 class SqlWriter {
   constructor(path, columns, o) {
     this.out = new FileOut(path);
@@ -119,19 +129,13 @@ class SqlWriter {
     this.n = 0;
     this.skipped = 0;
     this.d = o.dialect;
-    this.head = `INSERT INTO ${this.target} (${columns.map((c) => this.d.qi(c.name)).join(', ')}) VALUES (`;
     this.out.write(`-- Exported by Lookup on ${new Date().toISOString()}\n`);
     if (o.ddl) this.out.write(o.ddl.trim() + '\n\n');
     if (this.d.scriptStart) this.out.write(this.d.scriptStart);
   }
   async rows(batch) {
     for (const r of batch) {
-      const vals = [];
-      for (let i = 0; i < this.columns.length; i++) {
-        const lit = this.d.sqlLiteral(r[i], this.columns[i].type);
-        if (lit === null) { vals.push('NULL /* binary too large */'); this.skipped++; } else vals.push(lit);
-      }
-      let s = this.head + vals.join(', ') + ');\n';
+      let s = insertStatement(this.d, this.target, this.columns, r, () => this.skipped++) + '\n';
       this.n++;
       if (this.d.commit && this.batch && this.n % this.batch === 0) s += this.d.commit + '\n';
       const p = this.out.write(s);
@@ -206,4 +210,4 @@ function createWriter(format, path, columns, options = {}) {
   throw new Error('Unknown export format ' + format);
 }
 
-module.exports = { FORMATS, createWriter, exactNumber, parseLocalDate };
+module.exports = { FORMATS, createWriter, insertStatement, exactNumber, parseLocalDate };

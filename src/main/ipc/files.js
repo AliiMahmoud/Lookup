@@ -1,7 +1,7 @@
 // IPC for files: export (pick file, run, cancel), CSV, open / save .sql, show in folder.
 const path = require('path');
 const fs = require('fs');
-const { ipcMain, dialog, shell } = require('electron');
+const { ipcMain, dialog, shell, clipboard } = require('electron');
 const db = require('../db');
 // export.js (and exceljs behind it) is loaded on the first export, not at start.
 const exportFormats = () => require('../export').FORMATS;
@@ -21,9 +21,16 @@ handle('export:pickFile', async (winId, { format, name }) => {
 
 ipcMain.handle('export:run', async (event, job) => {
   try {
-    const data = await db.exportData(event.sender.id, job, (rows) => {
+    const progress = (rows) => {
       if (!event.sender.isDestroyed()) event.sender.send('export:progress', { jobId: job.jobId, rows });
-    });
+    };
+    if (job.toClipboard) {
+      const r = await db.exportToText(event.sender.id, job, progress);
+      if (r.cancelled) return { ok: true, data: r };
+      clipboard.writeText(r.text);
+      return { ok: true, data: { rows: r.rows, clipboard: true } };
+    }
+    const data = await db.exportData(event.sender.id, job, progress);
     return { ok: true, data };
   } catch (e) {
     return { ok: false, error: { message: e.message, code: e.code } };

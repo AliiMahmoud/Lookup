@@ -1,7 +1,7 @@
 // Oracle Table Data view: paged rows, and previewing / applying grid edits (by ROWID) in one transaction.
 const { qname, buildChanges, buildPageQuery } = require('./sqlgen');
 const { columnsFromMeta, serializeRows } = require('./values');
-const { tableColumns } = require('./metadata');
+const { tableColumns, primaryKey } = require('./metadata');
 
 async function tableData(s, { owner, name, type, offset = 0, limit = 300, filters = [], sort = null, withCount = true }) {
   const cols = await tableColumns(s, owner, name);
@@ -28,7 +28,9 @@ async function tableData(s, { owner, name, type, offset = 0, limit = 300, filter
   // Prefer dictionary types (e.g. VARCHAR2(50)) for display.
   const byName = Object.fromEntries(cols.map((c) => [c.name, c]));
   meta.forEach((m) => { if (byName[m.name]) { m.fullType = byName[m.name].fullType; m.nullable = byName[m.name].nullable; } });
-  return { columns: meta, rows, rowids, total, editable, ms, sql };
+  // Rows are matched by ROWID; the key only tells Duplicate row which values to leave empty.
+  const keyColumns = editable ? await primaryKey(s, owner, name) : [];
+  return { columns: meta, rows, rowids, total, editable, keyColumns, ms, sql };
 }
 
 async function previewChanges(s, { owner, name, changes }) {

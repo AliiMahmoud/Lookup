@@ -1,7 +1,7 @@
 {
   "name": "lookup",
   "productName": "Lookup",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A fast, native-feeling desktop client for Databases / Redis",
   "main": "src/main/main.js",
   "author": "Ali",

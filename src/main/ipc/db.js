@@ -22,7 +22,7 @@ handle('conn:sealPasswords', (_id, filePassword) => {
   return require('../conn-seal').seal(plain, filePassword);
 });
 handle('conn:openPasswords', (_id, sealed, filePassword) => require('../conn-seal').open(sealed, filePassword));
-handle('conn:delete', (_id, connId) => store.connections.remove(connId));
+handle('conn:delete', (_id, connId) => { store.connections.remove(connId); store.persisted.remove(connId); });
 handle('conn:reorder', (_id, ids) => store.connections.reorder(ids));
 
 handle('conn:test', (winId, cfg) => {
@@ -79,6 +79,9 @@ handle('db:ddl', (winId, owner, name, type, options) => db.ddl(winId, owner, nam
 // The formatter (about 8 MB) is loaded on first use.
 handle('sql:format', (winId, text, engineId) => require('../format').formatScript(String(text || ''), db.dialectOf(winId, engineId)));
 
+// Grid → Copy as SQL INSERT: the rows as INSERT statements in the connected database's dialect.
+handle('sql:inserts', (winId, target, columns, rows) => db.sqlInserts(winId, target, columns, rows));
+
 handle('db:run', (winId, statements, opts) => db.run(winId, statements, opts));
 
 handle('db:createTableSql', (winId, spec) => db.createTableSql(winId, spec));
@@ -110,6 +113,10 @@ handle('db:applyChanges', (winId, payload) => db.applyChanges(winId, payload));
 handle('history:list', (_id, connId) => store.history.list(connId));
 
 handle('history:add', (_id, connId, sql) => store.history.add(connId, sql));
+
+handle('persisted:get', (_id, connId) => store.persisted.get(connId));
+
+handle('persisted:set', (_id, connId, state) => store.persisted.set(connId, state));
 
 handle('app:newWindow', () => { createWindow(); });
 

@@ -1,5 +1,6 @@
 // Oracle: creating, altering, truncating and dropping tables.
 const { buildCreateTable, buildAlterTable, buildTruncate, buildDropTable } = require('./sqlgen');
+const { forgetTable } = require('./metadata');
 
 function createTableSql(_s, spec) {
   return buildCreateTable(spec).sql;
@@ -9,7 +10,7 @@ function createTableSql(_s, spec) {
 async function createTable(s, spec) {
   const { sql, table } = buildCreateTable(spec);
   await s.conn.execute(sql);
-  s.colCache.delete(`${spec.owner}.${table}`);
+  forgetTable(s, spec.owner, table);
   return { table, sql };
 }
 
@@ -29,11 +30,11 @@ async function alterTable(s, plan) {
       await s.conn.execute(st.sql);
       done.push(st);
     } catch (e) {
-      s.colCache.delete(`${plan.owner}.${plan.table}`);
+      forgetTable(s, plan.owner, plan.table);
       return { ok: false, done, failed: st, error: e.message, total: steps.length };
     }
   }
-  s.colCache.delete(`${plan.owner}.${plan.table}`);
+  forgetTable(s, plan.owner, plan.table);
   return { ok: true, done, total: steps.length };
 }
 
@@ -43,7 +44,7 @@ async function truncateTable(s, owner, table) {
 
 async function dropTable(s, owner, table, opts) {
   await s.conn.execute(buildDropTable(owner, table, opts));
-  s.colCache.delete(`${owner}.${table}`);
+  forgetTable(s, owner, table);
 }
 
 module.exports = { truncateTable, dropTable, createTableSql, createTable, alterTableSql, alterTable };

@@ -12,6 +12,8 @@ const { run } = require('./common/query');
 // Export jobs are loaded on the first export.
 const exportData = (...a) => require('./common/export-job').exportData(...a);
 const cancelExport = (...a) => require('./common/export-job').cancelExport(...a);
+const exportToText = (...a) => require('./common/export-job').exportToText(...a);
+const sqlInserts = (...a) => require('./common/export-job').sqlInserts(...a);
 
 /** A call on the workspace's open session, answered by its engine. */
 const onSession = (name) => async (winId, ...args) => {
@@ -43,7 +45,7 @@ module.exports = {
   configure, setOnLost,
   sqlLog, clearSqlLog, trackConnection, newLog,
   run,
-  exportData, cancelExport,
+  exportData, cancelExport, exportToText, sqlInserts,
   dialectOf,
   engineOp, setOnPush,
   // saved-connection helpers (by the connection's engine, no session needed)

@@ -37,7 +37,8 @@ function valueExpr(type, bindName, value) {
     return { sql: `TO_TIMESTAMP(:${bindName}, 'YYYY-MM-DD HH24:MI:SS.FF')`, preview: `TO_TIMESTAMP(${lit(v)}, 'YYYY-MM-DD HH24:MI:SS.FF')`, bind: true, value: v };
   }
   if (k === 'binary') {
-    const v = String(value).replace(/^0x/i, '');
+    // Hex text typed by the user, or a value from the grid ({ $bin: hex }, e.g. a duplicated row).
+    const v = (typeof value === 'object' && value.$bin !== undefined ? value.$bin : String(value)).replace(/^0x/i, '');
     return { sql: `HEXTORAW(:${bindName})`, preview: `HEXTORAW(${lit(v)})`, bind: true, value: v };
   }
   if (k === 'number') {

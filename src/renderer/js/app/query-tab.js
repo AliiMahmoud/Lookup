@@ -67,9 +67,12 @@
     const seen = new Set();
     return out.filter((x) => { const k = x.label + x.kind; if (seen.has(k)) return false; seen.add(k); return true; });
   }
-  function openQueryTab({ title, text = '', run = false } = {}) {
-    queryNo++;
-    const tab = { kind: 'query', title: title || `Query ${queryNo}`, defaultTitle: `Query ${queryNo}`, icon: 'code', results: [], resIndex: 0 };
+  /** persisted: the Persisted Queries tab, with its saved state ({ text, zoom, … } or {}). */
+  function openQueryTab({ title, text = '', run = false, persisted = null } = {}) {
+    const tab = persisted
+      ? { kind: 'query', persisted: true, connId: S.current.id, title: PERSISTED_TITLE, icon: 'pin', results: [], resIndex: 0 }
+      : { kind: 'query', title: title || `Query ${++queryNo}`, defaultTitle: `Query ${queryNo}`, icon: 'code', results: [], resIndex: 0 };
+    if (persisted) text = persisted.text || '';
     const runBtn = h('button', { class: 'btn sm primary', title: 'Run current statement (Ctrl+Enter)', onclick: () => runQuery(tab, 'current') }, icon('play'), 'Run');
     const runAllBtn = h('button', { class: 'btn sm', title: 'Run all (Ctrl+Shift+Enter)', onclick: () => runQuery(tab, 'all') }, icon('playAll'), 'Run all');
     const stopBtn = h('button', { class: 'btn sm hidden', title: 'Stop: ask the database to cancel the query', onclick: () => stopQuery(tab) }, icon('stop'), h('span', null, 'Stop'));
@@ -81,11 +84,11 @@
     const toolbar = h('div', { class: 'toolbar' }, runBtn, runAllBtn, stopBtn, explainBtn, h('div', { class: 'tb-sep' }), formatBtn, h('div', { class: 'spacer' }),
       maxRows,
       h('button', { class: 'tool', title: 'Query history', onclick: () => showHistory(tab) }, icon('history')),
-      h('button', { class: 'tool', title: 'Open .sql file', onclick: async () => { const f = await api.openSql(); if (f) { tab.editor.value = f.text; tab.title = f.name; Lookup.renderTabs(); saveQueryTabs(); } } }, icon('open')),
+      h('button', { class: 'tool', title: 'Open .sql file', onclick: async () => { const f = await api.openSql(); if (f) { tab.editor.value = f.text; if (!tab.persisted) { tab.title = f.name; Lookup.renderTabs(); } saveQueryTabs(); } } }, icon('open')),
       h('button', { class: 'tool', title: 'Save as .sql (Ctrl+Shift+S)', onclick: () => saveSqlFile(tab) }, icon('save')));
     tab.editor = new window.SqlEditor({
       value: text,
-      onChange: debounce(() => saveQueryTabs(), 500),
+      onChange: persisted ? () => persistSoon(tab) : debounce(() => saveQueryTabs(), 500),
       onRun: () => runQuery(tab, 'current'),
       onRunAll: () => runQuery(tab, 'all'),
       onSave: () => Lookup.commitShortcut(),
@@ -109,15 +112,46 @@
       const y0 = e.clientY;
       const h0 = edHost.getBoundingClientRect().height;
       const move = (ev) => { edHost.style.flexBasis = Math.max(80, Math.min(h0 + ev.clientY - y0, tab.el.clientHeight - 140)) + 'px'; };
-      const up = () => { removeEventListener('mousemove', move); removeEventListener('mouseup', up); tab.grid && tab.grid.paint(); };
+      const up = () => { removeEventListener('mousemove', move); removeEventListener('mouseup', up); tab.grid && tab.grid.paint(); if (tab.persisted) persistSoon(tab); };
       addEventListener('mousemove', move);
       addEventListener('mouseup', up);
     });
 
-    tab.onShow = () => { tab.editor.focus(); if (tab.grid) tab.grid.paint(); };
-    tab.destroy = () => tab.grid && tab.grid.destroy();
-    Lookup.addTab(tab);
-    saveQueryTabs();
+    tab.onShow = () => {
+      tab.editor.focus();
+      if (tab.grid) tab.grid.paint();
+      // A hidden editor loses its scroll position: Persisted Queries puts it back.
+      if (tab.persisted) { const ta = tab.editor.ta; [ta.scrollTop, ta.scrollLeft] = tab.scrollPos; tab.editor.sync(); }
+    };
+    tab.destroy = () => {
+      if (tab.persisted) persistNow(tab, !tab.closed); // closed by the user, or put away on disconnect (reopens)
+      if (tab.grid) tab.grid.destroy();
+    };
+    if (persisted) {
+      // Looks as it was left: zoom, row limit, editor height, then (once on screen) cursor and scroll.
+      if (persisted.zoom) tab.editor.setZoom(persisted.zoom);
+      if (persisted.maxRows !== undefined && [...maxRows.options].some((o) => o.value === String(persisted.maxRows))) maxRows.value = String(persisted.maxRows);
+      if (persisted.edHeight) edHost.style.flexBasis = persisted.edHeight;
+      const ta = tab.editor.ta;
+      tab.scrollPos = persisted.scroll || [0, 0];
+      ta.addEventListener('scroll', () => {
+        if (tab.el.classList.contains('hidden') || tab.restoring) return; // hiding resets it to 0; focusing scrolls to the cursor
+        tab.scrollPos = [ta.scrollTop, ta.scrollLeft];
+        persistSoon(tab);
+      });
+      ['keyup', 'mouseup'].forEach((ev) => ta.addEventListener(ev, () => persistSoon(tab)));
+      maxRows.addEventListener('change', () => persistSoon(tab));
+      // Cursor and scroll as they were: focusing the editor and placing the cursor would scroll to it.
+      const [a, b] = persisted.sel || [0, 0];
+      tab.restoring = true;
+      Lookup.addTab(tab);
+      ta.setSelectionRange(Math.min(a, ta.value.length), Math.min(b, ta.value.length));
+      requestAnimationFrame(() => { [ta.scrollTop, ta.scrollLeft] = tab.scrollPos; tab.editor.sync(); tab.restoring = false; });
+      persistNow(tab, true);
+    } else {
+      Lookup.addTab(tab);
+      saveQueryTabs();
+    }
     if (run) runQuery(tab, 'all');
     return tab;
   }
@@ -260,7 +294,8 @@
     resFoot.innerHTML = '';
     if (tab.resIndex >= 0) {
       const r = tab.results[tab.resIndex];
-      tab.grid = new window.DataGrid({ columns: r.columns, rows: r.rows, editable: false });
+      const from = /\bfrom\s+((?:"?[\w$#]+"?\.)?"?[\w$#]+"?)/i.exec(r.sql || '');
+      tab.grid = new window.DataGrid({ columns: r.columns, rows: r.rows, editable: false, sqlTarget: from ? from[1] : 'TABLE_NAME' });
       resBody.append(tab.grid.el);
       resFoot.append(
         h('span', { class: 'pager-info' }, `${fmtNum(r.rows.length)} row${r.rows.length === 1 ? '' : 's'}${r.truncated ? ' (limit reached)' : ''}`),
@@ -308,11 +343,46 @@
     paint();
     m = modal({ title: 'Query history', wide: true, body: h('div', null, search, box) });
   }
+  // ---------- Persisted Queries ----------
+  // One tab per connection whose text and look are saved in the app's data folder as you work, so
+  // closing it (or disconnecting, or quitting) and opening it again shows it exactly as it was.
+  const PERSISTED_TITLE = 'Persisted Queries';
+  const isSql = () => !['mongodb', 'redis'].includes(Lookup.engineId());
+  function persistedState(tab, open) {
+    const ta = tab.editor.ta;
+    return {
+      text: ta.value, open, zoom: tab.editor.zoom, maxRows: tab.parts.maxRows.value, edHeight: tab.parts.edHost.style.flexBasis || null,
+      sel: [ta.selectionStart, ta.selectionEnd], scroll: tab.scrollPos || [0, 0],
+    };
+  }
+  function persistNow(tab, open = true) {
+    clearTimeout(tab.persistTimer);
+    return api.savePersistedQueries(tab.connId, persistedState(tab, open)).catch((e) => toast('Persisted Queries not saved: ' + e.message, 'err'));
+  }
+  function persistSoon(tab) {
+    clearTimeout(tab.persistTimer);
+    tab.persistTimer = setTimeout(() => persistNow(tab, true), 400);
+  }
+  let opening = null;
+  /** Opens (or shows) this connection's Persisted Queries tab. */
+  function openPersistedQueries() {
+    if (!S.current || !isSql()) return null;
+    const open = S.tabs.find((t) => t.persisted);
+    if (open) { Lookup.activate(open.id); return Promise.resolve(open); }
+    opening = opening || api.persistedQueries(S.current.id)
+      .then((st) => openQueryTab({ persisted: st || {} }))
+      .catch((e) => { toast(e.message, 'err'); return null; })
+      .finally(() => { opening = null; });
+    return opening;
+  }
+
   // ---------- Persist query tabs per connection ----------
   function saveQueryTabs() {
     if (!S.current) return;
-    const tabs = S.tabs.filter((t) => t.kind === 'query').map((t) => ({ title: t.title, text: t.editor.value, zoom: t.editor.zoom !== 100 ? t.editor.zoom : undefined }));
+    const tabs = S.tabs.filter((t) => t.kind === 'query' && !t.persisted).map((t) => ({ title: t.title, text: t.editor.value, zoom: t.editor.zoom !== 100 ? t.editor.zoom : undefined }));
     try { localStorage.setItem('lookup.queries.' + S.current.id, JSON.stringify(tabs)); } catch { /* storage full */ }
+    const p = S.tabs.find((t) => t.persisted);
+    if (p) persistNow(p, true);
   }
   function restoreQueryTabs() {
     queryNo = 0;
@@ -321,7 +391,17 @@
     tabs.forEach((t) => { const tab = openQueryTab({ title: t.title, text: t.text }); if (t.zoom && tab && tab.editor) tab.editor.setZoom(t.zoom); });
     const nums = tabs.map((t) => Number((t.title.match(/^Query (\d+)$/) || [])[1] || 0));
     queryNo = Math.max(0, ...nums);
+    // Persisted Queries comes back if it was open when the connection was left; the last query tab stays in front.
+    if (isSql()) {
+      const connId = S.current.id;
+      api.persistedQueries(connId).then(async (st) => {
+        if (!st || !st.open || !S.current || S.current.id !== connId) return;
+        const front = S.active;
+        await openPersistedQueries();
+        if (front && S.tabs.some((t) => t.id === front)) Lookup.activate(front);
+      }).catch(() => {});
+    }
   }
 
-  Object.assign(Lookup, { openQueryTab, saveQueryTabs, restoreQueryTabs });
+  Object.assign(Lookup, { openQueryTab, saveQueryTabs, restoreQueryTabs, openPersistedQueries });
 })();

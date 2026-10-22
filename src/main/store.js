@@ -79,4 +79,24 @@ const history = {
   },
 };
 
-module.exports = { connections, history };
+// The Persisted Queries tab of each connection: its text and how it looked (cursor, scroll, zoom, row
+// limit, editor height), and whether it was open. Kept until the connection is deleted.
+const persisted = {
+  get(connId) {
+    return readJson('persisted-queries.json', {})[connId] || null;
+  },
+  set(connId, state) {
+    if (!connId) return;
+    const all = readJson('persisted-queries.json', {});
+    all[connId] = { ...state, updatedAt: Date.now() };
+    writeJson('persisted-queries.json', all);
+  },
+  remove(connId) {
+    const all = readJson('persisted-queries.json', {});
+    if (!(connId in all)) return;
+    delete all[connId];
+    writeJson('persisted-queries.json', all);
+  },
+};
+
+module.exports = { connections, history, persisted };

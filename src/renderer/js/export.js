@@ -54,7 +54,7 @@
       body.innerHTML = '';
       // Format
       const seg = h('div', { class: 'seg xp-seg' }, FORMATS.map(([k, label]) => h('button', {
-        type: 'button', class: st.format === k ? 'on' : '', onclick: () => { st.format = k; paint(); },
+        type: 'button', class: st.format === k ? 'on' : '', onclick: () => { st.format = k; paint(); paintFoot(); },
       }, label)));
 
       // Rows
@@ -123,11 +123,12 @@
           h('div', { class: 'xp-section' }, colHead, colBox)));
     }
 
-    async function start() {
+    /** Export to a file the user picks, or (SQL INSERT only) to the clipboard. */
+    async function start(toClipboard = false) {
       if (!st.cols.size) { toast('Pick at least one column', 'err'); return false; }
       Object.assign(remembered, { format: st.format, delimiter: st.delimiter, header: st.header, nullAs: st.nullAs, jsonStyle: st.jsonStyle, commitEvery: st.commitEvery, includeDdl: st.includeDdl });
-      const filePath = await api.exportPickFile(st.format, ctx.title);
-      if (!filePath) return false;
+      const filePath = toClipboard ? null : await api.exportPickFile(st.format, ctx.title);
+      if (!toClipboard && !filePath) return false;
       const idx = [...st.cols].sort((a, b) => a - b);
       const allCols = idx.length === ctx.columns.length;
       const options = {
@@ -135,7 +136,7 @@
         commitEvery: st.commitEvery, target: st.target, includeDdl: st.format === 'sql' && st.includeDdl, sheetName: ctx.title,
       };
       const jobId = 'x' + Date.now() + Math.random().toString(36).slice(2, 7);
-      const job = { jobId, format: st.format, filePath, options, owner: ctx.owner, name: ctx.name, type: ctx.type, engine: window.Lookup && window.Lookup.engineId ? window.Lookup.engineId() : undefined };
+      const job = { jobId, format: st.format, filePath, toClipboard, options, owner: ctx.owner, name: ctx.name, type: ctx.type, engine: window.Lookup && window.Lookup.engineId ? window.Lookup.engineId() : undefined };
       let expected = null;
       if (st.scope === 'all' && ctx.all.source === 'table') {
         Object.assign(job, { source: 'table', filters: ctx.all.filters, sort: ctx.all.sort, columns: allCols ? null : idx.map((i) => ctx.columns[i].name) });
@@ -154,7 +155,7 @@
     function runJob(job, expected) {
       const count = h('div', { class: 'xp-count' }, '0 rows');
       const bar = h('div', { class: 'xp-bar' }, h('div', { class: 'xp-fill' + (expected ? '' : ' indeterminate') }));
-      const fileLine = h('div', { class: 'muted mono xp-file' }, job.filePath);
+      const fileLine = h('div', { class: 'muted mono xp-file' }, job.toClipboard ? 'To the clipboard' : job.filePath);
       const cancelBtn = h('button', { class: 'btn', onclick: () => api.exportCancel(job.jobId) }, 'Cancel');
       const foot = m.box.querySelector('.modal-foot');
       body.innerHTML = '';
@@ -172,11 +173,18 @@
         body.innerHTML = '';
         foot.innerHTML = '';
         if (r.cancelled) {
-          body.append(h('div', { class: 'xp-done' }, h('p', null, `Export cancelled after ${fmtNum(r.rows)} rows. The partial file was removed.`)));
+          body.append(h('div', { class: 'xp-done' }, h('p', null, `Export cancelled after ${fmtNum(r.rows)} rows. ${job.toClipboard ? 'Nothing was copied.' : 'The partial file was removed.'}`)));
           foot.append(h('button', { class: 'btn primary', onclick: () => m.close() }, 'Close'));
           return;
         }
         const secs = ((Date.now() - t0) / 1000).toFixed(1);
+        if (r.clipboard) {
+          body.append(h('div', { class: 'xp-done' },
+            h('div', { class: 'xp-ok' }, icon('check')),
+            h('div', null, h('div', { class: 'strong' }, `Copied ${fmtNum(r.rows)} rows to the clipboard in ${secs} s`))));
+          foot.append(h('button', { class: 'btn primary', onclick: () => m.close() }, 'Done'));
+          return;
+        }
         body.append(h('div', { class: 'xp-done' },
           h('div', { class: 'xp-ok' }, icon('check')),
           h('div', null, h('div', { class: 'strong' }, `Exported ${fmtNum(r.rows)} rows in ${secs} s`), h('div', { class: 'muted mono xp-file' }, r.filePath))));
@@ -188,15 +196,16 @@
         body.innerHTML = '';
         foot.innerHTML = '';
         body.append(h('div', { class: 'err-title' }, 'Export failed'), h('pre', { class: 'err-text' }, e.message));
-        foot.append(h('button', { class: 'btn', onclick: () => paint() || resetFoot() }, 'Back'), h('button', { class: 'btn primary', onclick: () => m.close() }, 'Close'));
+        foot.append(h('button', { class: 'btn', onclick: () => paint() || paintFoot() }, 'Back'), h('button', { class: 'btn primary', onclick: () => m.close() }, 'Close'));
       });
     }
 
-    function resetFoot() {
+    function paintFoot() {
       const foot = m.box.querySelector('.modal-foot');
       foot.innerHTML = '';
-      foot.append(h('button', { class: 'btn', onclick: () => m.close() }, 'Cancel'),
-        h('button', { class: 'btn primary', onclick: () => start() }, icon('download'), 'Export…'));
+      foot.append(...[h('button', { class: 'btn', onclick: () => m.close() }, 'Cancel'),
+        st.format === 'sql' ? h('button', { class: 'btn', onclick: () => start(true) }, icon('copy'), 'Copy to clipboard') : null,
+        h('button', { class: 'btn primary', onclick: () => start() }, icon('download'), 'Export…')].filter(Boolean));
     }
 
     paint();
@@ -204,8 +213,9 @@
       title: `Export ${ctx.title}`,
       wide: true,
       body,
-      actions: [{ label: 'Cancel' }, { label: 'Export…', kind: 'primary', onClick: start }],
+      actions: [{ label: 'Cancel' }],
     });
+    paintFoot();
   }
 
   window.openExport = openExport;

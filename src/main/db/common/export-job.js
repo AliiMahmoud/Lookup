@@ -4,7 +4,7 @@ const { engine: engineById } = require('../engines');
 const { sessions, get } = require('./sessions');
 const { trackConnection } = require('./sql-log');
 
-const { createWriter } = require('../../export');
+const { createWriter, insertStatement } = require('../../export');
 
 const jobs = new Map(); // jobId -> { cancelled, conn, engine }
 
@@ -88,6 +88,33 @@ async function exportData(winId, job, onProgress) {
   }
 }
 
+// Larger than this, the text is too big to hold in one string and paste anywhere useful.
+const TEXT_MAX = 256 * 1024 * 1024;
+
+/** The same export as exportData, into a temporary file whose text is returned (for the clipboard). */
+async function exportToText(winId, job, onProgress) {
+  const ext = require('../../export').FORMATS[job.format].ext;
+  const safeId = String(job.jobId).replace(/[^\w-]/g, ''); // the name stays inside the temp folder
+  const filePath = require('path').join(require('os').tmpdir(), `lookup-${safeId}.${ext}`);
+  const fs = require('fs');
+  try {
+    const data = await exportData(winId, { ...job, filePath }, onProgress);
+    if (data.cancelled) return data;
+    if (fs.statSync(filePath).size > TEXT_MAX) throw new Error('This export is too large for the clipboard. Export it to a file instead.');
+    return { rows: data.rows, skipped: data.skipped, text: fs.readFileSync(filePath, 'utf8') };
+  } finally {
+    fs.rmSync(filePath, { force: true });
+  }
+}
+
+/** Rows from the grid as INSERT statements into target, in the session's (else engineId's) dialect. */
+function sqlInserts(winId, target, columns, rows, engineId) {
+  const s = sessions.get(winId);
+  const d = (s ? s.engine : engineById(engineId)).dialect;
+  if (!d.sqlLiteral) throw new Error('This database has no SQL INSERT statements');
+  return rows.map((r) => insertStatement(d, target, columns, r)).join('\n') + '\n';
+}
+
 async function cancelExport(jobId) {
   const st = jobs.get(jobId);
   if (!st) return;
@@ -95,4 +122,4 @@ async function cancelExport(jobId) {
   if (st.conn) await st.engine.cancelOn(st.conn).catch(() => {});
 }
 
-module.exports = { exportData, cancelExport };
+module.exports = { exportData, exportToText, sqlInserts, cancelExport };

@@ -229,6 +229,7 @@ Open more databases with the `+` in the left rail (`Ctrl+N`); each one keeps its
 - `Ctrl+Enter` runs the statement under the cursor, `Ctrl+Shift+Enter` runs the whole script
 - Manual commit by default: `Ctrl+S` commits, and the status bar shows when a transaction is open
 - Results stop at 500 rows unless you raise the limit; history and tabs come back per connection
+- **Persisted Queries** (title bar, next to Query): one query tab per connection, saved as you type; close it or quit and it opens again exactly as you left it
 
 
 
@@ -250,6 +251,7 @@ On a Mac, `⌘` works in place of `Ctrl`.
 | `Ctrl+Shift+L`                    | Show / hide the SQL log          |
 | `Ctrl+F` / `F5`                   | Filter / refresh a table         |
 | `Ctrl+Z` / `Ctrl+Y`               | Undo / redo grid changes         |
+| `Ctrl+D`                          | Duplicate the row in a table     |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0`    | Zoom in / out / reset            |
 | `Ctrl+Alt+→` / `Ctrl+Alt+←`       | Next / previous connection       |
 

@@ -123,6 +123,7 @@
       redis ? btn('Workbench: run Redis commands (Ctrl+T)', 'code', 'Workbench', 'newQuery')
         : mongo ? btn('Shell: mongosh-style commands (Ctrl+T)', 'terminal', 'Shell', 'newQuery')
           : btn('New query (Ctrl+E)', 'code', 'Query', 'newQuery'),
+      redis || mongo ? null : btn('Persisted Queries: one query tab, saved as you type, that opens again as you left it', 'pin', 'Persisted Queries', 'persistedQueries'),
       redis ? btn('Shell: redis-cli in a tab (Ctrl+Shift+T)', 'terminal', 'Shell', 'newShell') : null,
       redis ? btn('Delete all keys matching a pattern (like cart:*)', 'trash', 'Delete keys', 'deleteKeys') : null,
       mongo ? btn('Aggregation pipeline for the open collection', 'playAll', 'Aggregation', 'aggregation') : null].filter(Boolean));

@@ -99,6 +99,8 @@
         gridHost.innerHTML = '';
         tab.grid = new window.DataGrid({
           columns: d.columns, rows: d.rows, rowids: d.rowids, editable: d.editable, sort: tab.sort, startIndex: tab.offset,
+          sqlTarget: Lookup.qname(owner, name),
+          keyColumns: d.keyColumns,
           onSort: async (col) => {
             if (!(await tab.confirmLeave())) return;
             tab.sort = tab.sort && tab.sort.col === col ? (tab.sort.dir === 'asc' ? { col, dir: 'desc' } : null) : { col, dir: 'asc' };

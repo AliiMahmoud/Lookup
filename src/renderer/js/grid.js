@@ -1,6 +1,6 @@
 // Virtualized data grid with selection, inline editing and pending-change tracking.
 (function () {
-  const { h, icon, cellText, contextMenu, modal } = window.U;
+  const { h, icon, cellText, contextMenu, modal, toast } = window.U;
   const ROW_H = 26;
   const OVERSCAN = 12;
   const STEP = 10; // rows are rebuilt each time the view has scrolled this many rows, not on every row
@@ -18,7 +18,8 @@
   class DataGrid {
     /**
      * opts: { columns, rows, rowids, editable, sort, onSort(col), onChange(), onSelect(rowIndex),
-     *         onFilterValue(col, value), startIndex }
+     *         onFilterValue(col, value), startIndex, sqlTarget (table name for Copy as SQL INSERT),
+     *         keyColumns (primary key: left empty in a duplicated row) }
      */
     constructor(opts) {
       this.o = opts;
@@ -436,6 +437,7 @@
         this.copySelection(e.shiftKey);
         return;
       }
+      if (mod && e.key.toLowerCase() === 'd' && this.editable) { e.preventDefault(); this.duplicateRow(r); return; }
       if ((e.key === 'Delete' || e.key === 'Backspace') && this.editable) {
         e.preventDefault();
         this.deleteRows(this.selectedVisualRows()); // works for one row (focused cell) or many
@@ -480,6 +482,18 @@
         }).join('\t'));
       }
       window.api.copy(lines.join('\n'));
+    }
+
+    /** Copies the selected rows, with every column, as INSERT statements into o.sqlTarget. */
+    async copySql() {
+      if (this.sel.r < 0 || !this.o.sqlTarget) return;
+      const cols = this.columns.map((c) => ({ name: c.name, type: c.type }));
+      const vis = this.selectedVisualRows();
+      const rows = vis.map((vi) => { const { index } = this.rowAt(vi); return cols.map((_, c) => this.value(index, c)); });
+      try {
+        await window.api.copy(await window.api.sqlInserts(this.o.sqlTarget, cols, rows));
+        toast(`Copied ${vis.length} INSERT statement${vis.length === 1 ? '' : 's'}`, 'ok', 1800);
+      } catch (e) { toast(e.message, 'err', 5000); }
     }
 
     edit(vi, c) {
@@ -598,18 +612,40 @@
 
     addRow() {
       if (!this.editable) return;
-      this.record('add row');
-      this.inserted.push(this.columns.map(() => null));
+      this.insertRow(this.columns.map(() => null), 'add row', 0);
+    }
+
+    /** Adds a pending copy of row vi to edit before saving. The primary key is left empty (the copy
+     *  needs its own; an auto-generated one is filled in by the database), as is a binary the grid only
+     *  read part of. The first key column (else the first column) opens for editing. */
+    duplicateRow(vi) {
+      if (!this.editable || vi < 0 || vi >= this.total) return;
+      const { index } = this.rowAt(vi);
+      const keys = new Set(this.o.keyColumns || []);
+      let partial = 0;
+      const values = this.columns.map((col, c) => {
+        const v = this.value(index, c);
+        if (keys.has(col.name)) return null;
+        if (v && typeof v === 'object' && v.$bin !== undefined && v.$bin.length / 2 < v.len) { partial++; return null; }
+        return v;
+      });
+      this.insertRow(values, 'duplicate row', Math.max(0, this.columns.findIndex((col) => keys.has(col.name))));
+      if (partial) toast(`${partial} binary value${partial === 1 ? ' was' : 's were'} too large to copy here and ${partial === 1 ? 'was' : 'were'} left empty`, 'info', 4000);
+    }
+
+    insertRow(values, label, editCol) {
+      this.record(label);
+      this.inserted.push(values);
       const vi = this.total - 1;
-      this.anchor = { r: vi, c: 0 };
-      this.sel = { r: vi, c: 0 };
+      this.anchor = { r: vi, c: editCol };
+      this.sel = { r: vi, c: editCol };
       this.rowMode = false;
       this.extra.clear();
       this.refresh();
       this.el.scrollTop = this.el.scrollHeight;
       this.changed();
       this.emitSelect();
-      setTimeout(() => this.edit(vi, 0), 30);
+      setTimeout(() => this.edit(vi, editCol), 30);
     }
 
     deleteRows(vis) {
@@ -679,6 +715,7 @@
           : { label: 'Copy value', icon: 'copy', hint: 'Ctrl+C', onClick: () => window.api.copy(cellText(v)) },
         this.isMulti() ? { label: 'Copy selection with headers', hint: 'Ctrl+Shift+C', onClick: () => this.copySelection(true) } : null,
         { label: 'Copy row(s) with headers', icon: 'columns', onClick: () => this.copyRows(this.selectedVisualRows()) },
+        this.o.sqlTarget ? { label: 'Copy as SQL INSERT', icon: 'code', onClick: () => this.copySql() } : null,
         { label: 'Copy column name', onClick: () => window.api.copy(col.name) },
       ];
       if (this.o.onFilterValue && index >= 0) {
@@ -690,10 +727,9 @@
           { label: 'Edit in larger editor', onClick: () => this.editLong(index, c, v === null ? '' : String(v)), disabled: v && typeof v === 'object' },
           { label: 'Set NULL', onClick: () => this.setValue(index, c, null) },
           '-',
-          { label: this.deleted.has(index) ? 'Restore row' : 'Delete row(s)', icon: 'trash', danger: !this.deleted.has(index), hint: 'Del', onClick: () => this.deleteRows(this.selectedVisualRows()) },
-          this.canUndo() ? '-' : null,
-          this.canUndo() ? { label: `Undo ${this.undoStack[this.undoStack.length - 1].label}`, icon: 'undo', hint: 'Ctrl+Z', onClick: () => this.undo() } : null,
-          this.canRedo() ? { label: `Redo ${this.redoStack[this.redoStack.length - 1].label}`, hint: 'Ctrl+Shift+Z', onClick: () => this.redo() } : null);
+          { label: 'Duplicate row', icon: 'copy', hint: 'Ctrl+D', onClick: () => this.duplicateRow(vi) },
+          // Undo / Redo are Ctrl+Z / Ctrl+Shift+Z only, not in this menu.
+          { label: this.deleted.has(index) ? 'Restore row' : 'Delete row(s)', icon: 'trash', danger: !this.deleted.has(index), hint: 'Del', onClick: () => this.deleteRows(this.selectedVisualRows()) });
       }
       contextMenu(e.clientX, e.clientY, items.filter(Boolean));
     }

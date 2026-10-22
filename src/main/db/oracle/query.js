@@ -68,6 +68,9 @@ async function compileError(s, sql, warning, g) {
 
 /** g() races each wait against Stop / a lost connection. maxRows 0 = no limit. */
 async function runStatement(s, sql, { maxRows, g }) {
+  // SQL*Plus's SET DEFINE (first line of Lookup's own SQL INSERT exports): Lookup has no substitution
+  // variables, so there is nothing to switch; the server would answer ORA-00922.
+  if (/^\s*set\s+def(ine)?\s+(off|on)\s*$/i.test(sql)) return { kind: 'exec' };
   const r = await g(s.conn.rawExecute(sql, [], { resultSet: true, autoCommit: s.autoCommit })); // user's own query: not logged
   if (r.warning && /NJS-700|ORA-24344/.test(`${r.warning.code} ${r.warning.message}`)) throw await compileError(s, sql, r.warning, g);
   if (!r.resultSet) return { kind: 'exec', rowsAffected: r.rowsAffected };

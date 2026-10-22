@@ -22,7 +22,9 @@ module.exports = {
   qi,
   sqlLiteral,
   scriptStart: '',
-  commit: 'COMMIT;',
+  // No COMMIT lines: with auto-commit on (and in the sqlite3 shell) there is no transaction to commit, and
+  // SQLite rejects COMMIT then; with manual commit, the inserts are committed like any other change.
+  commit: '',
   splitDialect: 'sqlite',
   formatLanguage: 'sqlite',
   formatOptions: { paramTypes: { positional: true } },

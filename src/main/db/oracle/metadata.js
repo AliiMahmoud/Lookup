@@ -29,6 +29,28 @@ async function objects(s, owner) {
     .map(([name, type, status]) => ({ name, type, invalid: status !== 'VALID' }));
 }
 
+/** Drops a table's cached columns and primary key (after it was created, altered or dropped). */
+function forgetTable(s, owner, table) {
+  s.colCache.delete(owner + '.' + table);
+  s.colCache.delete('pk:' + owner + '.' + table);
+}
+
+/** The primary key's columns in key order (cached with the columns); [] when there is none. */
+async function primaryKey(s, owner, table) {
+  const key = 'pk:' + owner + '.' + table;
+  if (s.colCache.has(key)) return s.colCache.get(key);
+  const r = await s.conn.execute(
+    `SELECT cc.column_name FROM all_constraints c
+       JOIN all_cons_columns cc ON cc.owner = c.owner AND cc.constraint_name = c.constraint_name
+      WHERE c.owner = :o AND c.table_name = :t AND c.constraint_type = 'P'
+      ORDER BY cc.position`,
+    { o: owner, t: table }
+  );
+  const cols = r.rows.map((x) => x[0]);
+  s.colCache.set(key, cols);
+  return cols;
+}
+
 async function tableColumns(s, owner, table) {
   const key = owner + '.' + table;
   if (s.colCache.has(key)) return s.colCache.get(key);
@@ -60,7 +82,7 @@ async function columns(s, owner, table) {
 }
 
 async function structure(s, owner, name) {
-  s.colCache.delete(owner + '.' + name);
+  forgetTable(s, owner, name);
   const cols = await tableColumns(s, owner, name);
   const cons = await s.conn.execute(
     `SELECT c.constraint_name, c.constraint_type, c.status, c.search_condition_vc, c.r_owner, c.r_constraint_name,
@@ -150,4 +172,4 @@ async function databases(s) {
   return { current, list, note };
 }
 
-module.exports = { tableColumns, databases, schemas, objects, columns, structure };
+module.exports = { tableColumns, primaryKey, forgetTable, databases, schemas, objects, columns, structure };

@@ -36,6 +36,7 @@
     synonym: '<path d="M3 6h8.5L9 3.5M13 10H4.5L7 12.5"/>',
     type: '<path d="M3.5 3.5h9M8 3.5v9M5.5 12.5h5"/>',
     plus: '<path d="M8 3v10M3 8h10"/>',
+    pin: '<path d="M6 2.5h4M7 2.5v4L4.5 9h7L9 6.5v-4M8 9v4.5"/>',
     refresh: '<path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.8v2.6h-2.6"/>',
     play: '<path d="M5 3.3v9.4L12.5 8z" fill="currentColor"/>',
     playAll: '<path d="M3 3.5v9l5-4.5zM8.5 3.5v9l5-4.5z" fill="currentColor"/>',
