@@ -357,7 +357,7 @@
       if (out.noPassword) { out.password = ''; out.keepPassword = false; }
       if (oracle) { delete out.database; delete out.ssl; } else { delete out.service; delete out.serviceType; delete out.role; }
       if (noTx) out.autoCommit = true;
-      if (redis) { out.database = Math.max(0, Math.floor(Number(f.database) || 0)); out.readOnly = !!f.readOnly; }
+      if (redis) { out.database = Math.max(0, Math.floor(Number(f.database) || 0)); out.readOnly = !!f.readOnly; out.clusterNodes = String(f.clusterNodes || '').trim(); }
       else if (mongo) { out.readOnly = !!f.readOnly; out.srv = !!f.srv; out.host = String(f.host || '').trim(); }
       else delete out.readOnly;
       return out;
@@ -423,6 +423,8 @@
       field('Name', inp('name', { placeholder: 'e.g. Billing — staging' })),
       field('Tag', envRow),
       modeBox,
+      redis ? field('Cluster nodes (optional)', inp('clusterNodes', { placeholder: '127.0.0.1:6380, 127.0.0.1:6381', spellcheck: 'false' }),
+        'For a cluster behind port-forwards or tunnels: the local address of every other master. Lookup finds which node is which.') : null,
       fileBased ? null : h('div', { class: 'grid2' },
         field('User', inp('user', { placeholder: oracle ? 'HR' : engine.id === 'postgres' ? 'postgres' : engine.id === 'clickhouse' || redis ? 'default' : mongo ? 'optional' : 'root', autocomplete: 'off' })),
         field('Password', pwBox)),

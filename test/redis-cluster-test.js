@@ -1,5 +1,5 @@
 // Redis Cluster against a real 3-master cluster: key slots, routing by key, pipelines split per node,
-// MOVED after a stale slot map, scanning every master, Workbench routing (key / picked node / all
+// MOVED after a stale slot map, nodes behind port-forwards, scanning every master, Workbench routing (key / picked node / all
 // masters), the Shell following redirects exactly like redis-cli -c, Overview per node. Flushes the cluster.
 // Run: node test/redis-cluster-test.js   (cluster from LOOKUP_REDIS_CLUSTER_URL, default redis://lookup:lookup@127.0.0.1:7000)
 // Skips (exit 0) when no cluster answers.
@@ -7,7 +7,7 @@ const assert = require('assert');
 const { spawnSync } = require('child_process');
 const db = require('../src/main/db');
 const { open, Pipe, Cmd } = require('../src/main/db/redis/connect');
-const { slotOf, crc16 } = require('../src/main/db/redis/cluster');
+const { slotOf, crc16, parseNodeList } = require('../src/main/db/redis/cluster');
 const { formatTTY } = require('../src/shared/redis-cli');
 
 const u = new URL(process.env.LOOKUP_REDIS_CLUSTER_URL || 'redis://lookup:lookup@127.0.0.1:7000');
@@ -71,6 +71,25 @@ const t = async (name, fn) => { await fn(); passed++; console.log('  ok ', name)
     assert.strictEqual((await op('remove', { keys: ['k:1', 'k:2', 'k:3'] })).removed, 3); // three slots
     await op('create', { key: 'new:z', type: 'zset', member: 'm', score: '2', ttl: 60 });
     assert.strictEqual(await admin.execute(new Cmd(['ZSCORE', 'new:z', 'm'])), '2');
+  });
+
+  await t('port-forwards: another node at the fallback address is refused; listed addresses are matched by CLUSTER MYID', async () => {
+    assert.deepStrictEqual(parseNodeList('127.0.0.1:6380, [::1]:6381\nhost', 6379), [{ host: '127.0.0.1', port: 6380 }, { host: '::1', port: 6381 }, { host: 'host', port: 6379 }]);
+    assert.throws(() => parseNodeList('h:99999', 6379), /not host:port/);
+    // A pod address that doesn't resolve, on the seed's port: the fallback (the typed host) is the seed
+    // itself, as with one kubectl port-forward. It must not stand in for another master.
+    const [, second] = admin.masterIds();
+    const pod = `redis-1.pods.invalid:${cfg.port}`;
+    const c = await open(cfg);
+    c.nodeIds.set(pod, c.nodeIds.get(second));
+    await assert.rejects(c.connectNode(pod, 'test'), /redis-1\.pods\.invalid.*another node answers there.*Cluster nodes/s);
+    await c.close();
+    const i = second.lastIndexOf(':');
+    const listed = await open({ ...cfg, clusterNodes: `${second.slice(0, i)}:${second.slice(i + 1)}` });
+    listed.nodeIds.set(pod, listed.nodeIds.get(second));
+    const n = await listed.connectNode(pod, 'test');
+    assert.strictEqual(String(await n.call('CLUSTER', 'MYID')), listed.nodeIds.get(second));
+    await listed.close();
   });
 
   await t('a stale slot map is fixed by MOVED (and the command still answers)', async () => {

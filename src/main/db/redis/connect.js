@@ -141,7 +141,7 @@ async function open(cfg) {
   if (mode === 'cluster') {
     const { ClusterConn } = require('./cluster');
     const conn = new ClusterConn(client, t, cfg);
-    try { await conn.loadSlots(); } catch (e) { await conn.close(); throw e; }
+    try { await conn.loadSlots(); await conn.mapAddresses(); } catch (e) { await conn.close(); throw e; }
     return conn;
   }
   return new RedisConn(client, t, cfg);

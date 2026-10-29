@@ -50,7 +50,7 @@
         engine, name: name || info.ConnName || '', env: ENVS[info.LookupEnv] ? info.LookupEnv : 'none', user: info.user || '', autoCommit: false,
         ssl: info.LookupSsl || (engine === 'redis' || engine === 'clickhouse' ? 'disable' : 'prefer'), database: info.LookupDatabase || info.database || '',
       };
-      if (engine === 'redis') { c.autoCommit = true; c.database = Number(c.database) || 0; c.readOnly = isTrue(info.LookupReadOnly); }
+      if (engine === 'redis') { c.autoCommit = true; c.database = Number(c.database) || 0; c.readOnly = isTrue(info.LookupReadOnly); if (info.LookupClusterNodes) c.clusterNodes = info.LookupClusterNodes; }
       if (engine === 'mongodb') {
         c.autoCommit = true;
         c.readOnly = isTrue(info.LookupReadOnly);
@@ -140,6 +140,7 @@
       ...(c.database ? [['LookupDatabase', String(c.database)]] : []),
       ...(c.ssl ? [['LookupSsl', c.ssl]] : []),
       ...(c.readOnly ? [['LookupReadOnly', 'true']] : []),
+      ...(c.engine === 'redis' && c.clusterNodes ? [['LookupClusterNodes', c.clusterNodes]] : []),
       ['SavePassword', 'false'],
       ...(c.env && c.env !== 'none' ? [['LookupEnv', c.env]] : []),
       ...(sealed[c.id] ? [['LookupPassword', sealed[c.id]]] : []),

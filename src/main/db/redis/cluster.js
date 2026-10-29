@@ -1,7 +1,9 @@
 // Redis Cluster: one connection per node, opened when first needed. Each command goes to the node
 // holding its key's slot (CRC16 of the key, or of its {hash tag}); MOVED refreshes the slot map and
 // sends again, ASK sends ASKING first. Pipelines are split per node and put back in order. Nodes that
-// announce an address Lookup can't reach (Docker, SSH tunnels) are tried at the host the user typed.
+// announce an address Lookup can't reach (Docker, SSH tunnels, Kubernetes port-forwards) are tried at
+// the extra addresses the user listed (cfg.clusterNodes), then at the host the user typed; an address
+// is used only if CLUSTER MYID there is the node that was asked for.
 const { plain } = require('./resp');
 const { RedisConn, Pipe, openClient } = require('./connect');
 
@@ -42,6 +44,15 @@ const redirect = (r) => (r && r.t === 'error' && /^(MOVED|ASK) /.test(r.v) ? (()
   const [kind, slot, addr] = r.v.split(' ');
   return { kind, slot: Number(slot), addr };
 })() : null);
+
+/** "host:port, host:port" (commas, spaces or new lines) -> [{ host, port }]; a bare host gets `port`. */
+function parseNodeList(text, port) {
+  return String(text || '').split(/[\s,;]+/).filter(Boolean).map((x) => {
+    const m = /^\[?([^\]]+?)\]?(?::(\d+))?$/.exec(x);
+    if (!m || (m[2] && !(Number(m[2]) > 0 && Number(m[2]) < 65536))) throw new Error(`Cluster nodes: "${x}" is not host:port`);
+    return { host: m[1], port: m[2] ? Number(m[2]) : port };
+  });
+}
 
 /** Connections to the nodes for one purpose (the key browser, or the Workbench). */
 class NodePool {
@@ -91,6 +102,8 @@ class ClusterConn extends RedisConn {
     this.nodes = []; // masters: { id, ranges: [[from, to]], replicas: [id] }
     this.reach = new Map(); // node id -> { host, port } it was reached at
     this.reach.set(this.seed, { host: t.host, port: t.port });
+    this.nodeIds = new Map(); // node id "host:port" -> the node's CLUSTER MYID (Redis 4 and later)
+    this.byNodeId = new Map(); // CLUSTER MYID -> { host, port } it answers at, from the seed and extraAddrs
     this.pool = new NodePool(this, 'lookup');
     this.pool.clients.set(this.seed, client);
   }
@@ -100,11 +113,12 @@ class ClusterConn extends RedisConn {
     const rows = await this.client.call('CLUSTER', 'SLOTS');
     const byId = new Map();
     const idOf = (n) => `${String(n[0]) || this.t.host}:${n[1]}`;
+    const seen = (n) => { const id = idOf(n); if (n[2]) this.nodeIds.set(id, String(n[2])); return id; };
     this.slots.fill(null);
     for (const row of rows) {
       const [from, to, master, ...replicas] = row;
-      const id = idOf(master);
-      if (!byId.has(id)) byId.set(id, { id, ranges: [], replicas: replicas.map(idOf) });
+      const id = seen(master);
+      if (!byId.has(id)) byId.set(id, { id, ranges: [], replicas: replicas.map(seen) });
       byId.get(id).ranges.push([Number(from), Number(to)]);
       for (let s = Number(from); s <= Number(to); s++) this.slots[s] = id;
     }
@@ -112,30 +126,66 @@ class ClusterConn extends RedisConn {
     return this.nodes;
   }
 
+  /** Finds which node answers at the seed and at each listed address (CLUSTER MYID), so a node whose
+   *  announced address can't be reached goes straight to the right one. Addresses that don't answer
+   *  are skipped here; the node behind one says so when it is needed. */
+  async mapAddresses() {
+    const extra = parseNodeList(this.cfg.clusterNodes, this.t.port); // forwarded / tunnelled node addresses
+    const myId = async (c) => { try { return String(await c.call('CLUSTER', 'MYID')); } catch { return null; } };
+    const seedId = await myId(this.client);
+    if (seedId) this.byNodeId.set(seedId, { host: this.t.host, port: this.t.port });
+    await Promise.all(extra.map(async (a) => {
+      let c;
+      try {
+        c = await openClient({ ...this.t, host: a.host, port: a.port, database: 0 }, this.cfg, 'lookup');
+        const id = await myId(c);
+        if (id && !this.byNodeId.has(id)) this.byNodeId.set(id, a);
+      } catch (e) { if (e.redis) throw e; } finally { if (c) c.destroy(); }
+    }));
+  }
+
   masterIds() { return this.nodes.map((n) => n.id); }
 
   nodeOfKey(key) { return this.slots[slotOf(key)] || this.seed; }
 
-  /** A logged-in connection to a node; an announced address that can't be reached is tried at the
-   *  host the user typed, with the node's port. */
+  /** A logged-in connection to a node: at the address it was reached at before, else at a listed
+   *  address that answered as this node, its announced address, or the host the user typed with the
+   *  node's port. An address where another node answers (one port-forward reaches only one pod) is
+   *  not used. */
   async connectNode(id, name) {
     const i = id.lastIndexOf(':');
     const host = id.slice(0, i);
     const port = Number(id.slice(i + 1));
     const known = this.reach.get(id);
-    const tries = known ? [known] : [{ host, port }, ...(host !== this.t.host ? [{ host: this.t.host, port }] : [])];
+    if (!known && !this.nodeIds.has(id)) await this.loadSlots().catch(() => {}); // a MOVED to a node not seen yet
+    const nodeId = this.nodeIds.get(id);
+    const mapped = nodeId && this.byNodeId.get(nodeId);
+    const same = (a, b) => a.host === b.host && a.port === b.port;
+    const tries = [];
+    for (const a of known ? [known] : [mapped, { host, port }, { host: this.t.host, port }]) if (a && !tries.some((b) => same(a, b))) tries.push(a);
     let last;
+    let wrong = 0;
     for (const a of tries) {
+      let c;
       try {
-        const c = await openClient({ ...this.t, host: a.host, port: a.port, database: 0 }, this.cfg, name);
-        this.reach.set(id, a);
-        // Every node connection (key browser, Workbench, Shell) is closed with the session.
-        this.extras.add(c);
-        c.once('close', () => this.extras.delete(c));
-        return c;
-      } catch (e) { last = e; if (e.redis) throw e; } // a login error won't change at another address
+        c = await openClient({ ...this.t, host: a.host, port: a.port, database: 0 }, this.cfg, name);
+      } catch (e) { last = e; if (e.redis) throw e; continue; } // a login error won't change at another address
+      if (nodeId && a !== known && a !== mapped) {
+        const answered = await c.call('CLUSTER', 'MYID').then(String, () => nodeId); // not allowed: trust it
+        if (answered !== nodeId) { c.destroy(); wrong++; continue; }
+      }
+      this.reach.set(id, a);
+      // Every node connection (key browser, Workbench, Shell) is closed with the session.
+      this.extras.add(c);
+      c.once('close', () => this.extras.delete(c));
+      return c;
     }
-    throw last;
+    const node = this.nodes.find((n) => n.id === id);
+    const slots = node ? ` (slots ${node.ranges.map(([a, b]) => (a === b ? a : `${a}-${b}`)).join(', ')})` : '';
+    const why = wrong ? 'another node answers there' : last ? last.message : 'no address to try';
+    throw Object.assign(new Error(`Cluster node ${id}${slots} can't be reached from this computer: ${why}. `
+      + 'Through a port-forward or tunnel, give every master its own local port and list those addresses under '
+      + '"Cluster nodes" in the connection (for example 127.0.0.1:6380, 127.0.0.1:6381).'), { code: last && last.code });
   }
 
   /** App-issued commands (logged): routed by key, or to cmd.node; pipelines split per node. */
@@ -192,4 +242,4 @@ class ClusterConn extends RedisConn {
   }
 }
 
-module.exports = { ClusterConn, NodePool, slotOf, crc16, keyOf, redirect };
+module.exports = { ClusterConn, NodePool, slotOf, crc16, keyOf, redirect, parseNodeList };
