@@ -188,6 +188,18 @@ Open more databases with the `+` in the left rail (`Ctrl+N`); each one keeps its
 - **Overview**: commands per second, memory, clients, slow log
 - **Redis Cluster** is detected by itself
 
+#### Redis Cluster on Kubernetes (port-forward)
+
+The nodes of a cluster in a StatefulSet announce pod addresses, which your computer can't reach, and every pod listens on the same port. One `kubectl port-forward` reaches only one pod, so keys on the other masters fail with `MOVED`. Forward every master pod to its own local port:
+
+```
+kubectl port-forward pod/redis-0 6379:6379
+kubectl port-forward pod/redis-1 6380:6379
+kubectl port-forward pod/redis-2 6381:6379
+```
+
+Then connect to `127.0.0.1:6379` and put the other addresses in **Cluster nodes** in the connection: `127.0.0.1:6380, 127.0.0.1:6381`. Lookup asks each address which node it is (`CLUSTER MYID`), so pod IPs that change on restart don't matter. Forward the pods, not the Service: a Service sends each connection to any pod.
+
 
 
 ### MongoDB
