@@ -200,6 +200,8 @@ kubectl port-forward pod/redis-2 6381:6379
 
 Then connect to `127.0.0.1:6379` and put the other addresses in **Cluster nodes** in the connection: `127.0.0.1:6380, 127.0.0.1:6381`. Lookup asks each address which node it is (`CLUSTER MYID`), so pod IPs that change on restart don't matter. Forward the pods, not the Service: a Service sends each connection to any pod.
 
+If the cluster has replicas, forward and list them too. Lookup only sends commands to masters, but after a failover a replica becomes one, and an address already in the list is used at once instead of the node being unreachable until you add it. A replica in the list costs one short connection when you connect.
+
 
 
 ### MongoDB
