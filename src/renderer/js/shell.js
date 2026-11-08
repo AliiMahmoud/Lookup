@@ -94,6 +94,7 @@
       h('span', { class: 'name' }, ws.title),
       env ? h('span', { class: 'env-tag', style: { '--c': env[1] } }, env[0]) : null,
       // PostgreSQL shows "database · schema"; Oracle and MySQL show the schema (MySQL: the database).
+      ws.insight && !/RedisInsight/.test(ws.title) ? h('span', { class: 'meta' }, 'RedisInsight') : null,
       ws.schema ? h('span', { class: 'meta' }, ws.engine === 'postgres' && ws.dbName ? `${ws.dbName} · ${ws.schema}` : ws.schema) : null].filter(Boolean));
   }
 
@@ -103,7 +104,7 @@
     box.innerHTML = '';
     left.innerHTML = '';
     const ws = data.list.find((x) => x.id === data.active);
-    if (!ws || !ws.connected) return;
+    if (!ws || !ws.connected || ws.insight) return; // RedisInsight has its own buttons in the page
     const btn = (title, ic, label, action, extra = {}) => h('button', {
       class: 'tb-btn' + (extra.cls ? ' ' + extra.cls : ''), title, disabled: extra.disabled,
       onclick: () => api.action(action),

@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('api', {
   reorderConnections: (ids) => call('conn:reorder', ids),
   testConnection: (c) => call('conn:test', c),
   cancelTest: () => call('conn:cancelTest'),
+  testInsight: (url) => call('insight:test', url),
   connect: (id, password) => call('db:connect', id, password),
   disconnect: () => call('db:disconnect'),
   cancel: () => call('db:cancel'),

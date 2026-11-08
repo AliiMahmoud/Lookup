@@ -74,6 +74,7 @@
   function target(c) {
     const e = engineOf(c);
     if (e.file) return `${c.file || '(no file chosen)'}${c.readOnly ? ' · read-only' : ''}`;
+    if (e.id === 'redis' && c.mode === 'insight') return `RedisInsight · ${c.insightUrl || '(no address)'}`;
     if (c.mode === 'string') return `${c.user ? c.user + ' · ' : ''}${e.id === 'oracle' ? 'connect string' : 'URL'}`;
     const where = `${c.host || 'localhost'}:${c.port || e.port}`;
     if (e.id === 'oracle') return `${c.user}@${where}/${c.service || ''}`;

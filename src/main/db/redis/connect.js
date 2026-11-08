@@ -148,6 +148,7 @@ async function open(cfg) {
 }
 
 function targetKey(cfg) {
+  if (cfg.mode === 'insight') return `insight:${String(cfg.insightUrl || '').toLowerCase()}`;
   const t = targetOf(cfg);
   return `${t.tls ? 'rediss' : 'redis'}://${t.host.toLowerCase()}:${t.port}/${t.database}|${t.user || 'default'}`;
 }

@@ -11,6 +11,14 @@
   function pushState() {
     if (!api.wsState) return;
     const c = S.current;
+    if (c && S.insight) {
+      api.wsState({
+        connected: true, connecting: false, connId: c.id, title: c.name || 'RedisInsight', env: c.env || 'none', schema: null,
+        detail: Lookup.target(c), engine: 'redis', engineLabel: 'RedisInsight', insight: true, badge: Lookup.engineOf(c).badge,
+        initials: Lookup.initials(c), badgeColor: Lookup.engineOf(c).color, databasesWord: null, txPending: false,
+      });
+      return;
+    }
     api.wsState(c && S.info ? {
       connected: true,
       connecting: false,

@@ -185,6 +185,17 @@
     renderWelcome();
     Lookup.renderStatus();
   }
+  /** A RedisInsight address as typed ("localhost:5540", "https://ri.example.com/") → "http://localhost:5540"; '' when empty or not http(s). */
+  function normalizeInsightUrl(v) {
+    let t = String(v || '').trim();
+    if (!t) return '';
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(t)) t = 'http://' + t;
+    try {
+      const u = new URL(t);
+      return u.protocol === 'http:' || u.protocol === 'https:' ? u.href.replace(/\/$/, '') : '';
+    } catch { return ''; }
+  }
+  const isInsight = (c) => !!c && c.engine === 'redis' && c.mode === 'insight';
   function field(label, control, hint) {
     return h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), control, hint ? h('span', { class: 'field-hint' }, hint) : null);
   }
@@ -313,8 +324,17 @@
       ? h('div', null, field('Connect string', inp('connectString', { placeholder: 'host:1521/service  or  (DESCRIPTION=…)' }), 'EZConnect or a full TNS descriptor.'))
       : h('div', null, field('URL', inp('connectString', { placeholder: engine.id === 'postgres' ? 'postgres://user@host:5432/database?sslmode=require' : engine.id === 'clickhouse' ? 'https://host:8443' : redis ? 'redis://user@host:6379/0  or  rediss:// for TLS' : mongo ? 'mongodb+srv://cluster0.example.mongodb.net/mydb  or  mongodb://host:27017/mydb' : 'mysql://user@host:3306/database' }),
         'User and password typed below are used instead of the ones in the URL.'));
+    // Redis through RedisInsight: for a Redis only a RedisInsight can reach (a private cluster). Connecting opens RedisInsight.
+    const insightBox = redis ? h('div', null, field('RedisInsight URL', inp('insightUrl', { placeholder: 'https://redisinsight.example.com  or  http://localhost:5540', spellcheck: 'false' }),
+      'For a Redis that only a RedisInsight can reach, like one in a private cluster. Connecting opens RedisInsight in this tab. Lookup itself never connects to Redis.')) : null;
     const modeBox = h('div');
-    const paintMode = () => { modeBox.innerHTML = ''; modeBox.append(fileBased ? fileBox : f.mode === 'string' ? str : mongo ? mongoBox : basic); };
+    const notForInsight = []; // host / login fields, hidden in RedisInsight mode
+    const nfi = (el) => { notForInsight.push(el); return el; };
+    const paintMode = () => {
+      modeBox.innerHTML = '';
+      modeBox.append(fileBased ? fileBox : f.mode === 'insight' && redis ? insightBox : f.mode === 'string' ? str : mongo ? mongoBox : basic);
+      for (const el of notForInsight) if (el) el.classList.toggle('hidden', f.mode === 'insight');
+    };
     paintMode();
 
     const pw = inp('password', { type: 'password', placeholder: c.keepPassword && c.hasPassword ? '•••••••• (saved)' : '' });
@@ -357,7 +377,7 @@
       if (out.noPassword) { out.password = ''; out.keepPassword = false; }
       if (oracle) { delete out.database; delete out.ssl; } else { delete out.service; delete out.serviceType; delete out.role; }
       if (noTx) out.autoCommit = true;
-      if (redis) { out.database = Math.max(0, Math.floor(Number(f.database) || 0)); out.readOnly = !!f.readOnly; out.clusterNodes = String(f.clusterNodes || '').trim(); }
+      if (redis) { out.database = Math.max(0, Math.floor(Number(f.database) || 0)); out.readOnly = !!f.readOnly; out.clusterNodes = String(f.clusterNodes || '').trim(); out.insightUrl = normalizeInsightUrl(f.insightUrl); }
       else if (mongo) { out.readOnly = !!f.readOnly; out.srv = !!f.srv; out.host = String(f.host || '').trim(); }
       else delete out.readOnly;
       return out;
@@ -369,6 +389,7 @@
     };
 
     const doTest = async () => {
+      if (redis && f.mode === 'insight') return testInsight();
       status.className = 'form-status';
       status.textContent = 'Testing…';
       busy(true);
@@ -391,8 +412,22 @@
         else { status.className = 'form-status err'; status.textContent = e.message; }
       } finally { overlay.remove(); busy(false); document.removeEventListener('keydown', onEsc, true); }
     };
+    const testInsight = async () => {
+      const url = normalizeInsightUrl(f.insightUrl);
+      if (!url) { status.className = 'form-status err'; status.textContent = 'Enter the RedisInsight address, like https://redisinsight.example.com'; return; }
+      status.className = 'form-status';
+      status.textContent = 'Testing…';
+      busy(true);
+      try {
+        const r = await api.testInsight(url);
+        status.className = 'form-status ok';
+        status.textContent = r.version ? `RedisInsight ${r.version} answers at ${url}` : `${url} answers (HTTP ${r.status}): maybe a sign-in page in front of RedisInsight. Connect to open it.`;
+      } catch (e) { status.className = 'form-status err'; status.textContent = e.message; } finally { busy(false); }
+    };
     const doSave = async () => {
       const cfg = collect();
+      if (isInsight(cfg) && !cfg.insightUrl) { status.className = 'form-status err'; status.textContent = 'Enter the RedisInsight address (http:// or https://).'; throw new Error('No URL'); }
+      if (isInsight(cfg) && !cfg.name) cfg.name = `RedisInsight · ${new URL(cfg.insightUrl).host}`;
       if (fileBased && !cfg.file) { status.className = 'form-status err'; status.textContent = 'Choose a database file (Open file… or New file…).'; throw new Error('No file'); }
       if (!cfg.name) cfg.name = fileBased ? cfg.file.split(/[\\/]/).pop() : cfg.mode === 'string' ? cfg.user || engine.label : `${cfg.user || (redis ? 'default' : '')}@${cfg.host}`;
       const id = await api.saveConnection(cfg);
@@ -414,30 +449,31 @@
         h('h2', null, c.id ? 'Edit connection' : 'New connection'),
         h('div', { class: 'spacer' }),
         fileBased ? null : h('div', { class: 'seg' },
-          ['basic', 'string'].map((m) => h('button', {
+          (redis ? ['basic', 'string', 'insight'] : ['basic', 'string']).map((m) => h('button', {
             type: 'button', class: f.mode === m ? 'on' : '',
             onclick: (e) => { f.mode = m; e.currentTarget.parentNode.querySelectorAll('button').forEach((b) => b.classList.remove('on')); e.currentTarget.classList.add('on'); paintMode(); },
-          }, m === 'basic' ? (oracle ? 'Basic' : 'Fields') : (oracle ? 'Connect string' : 'URL')))),
+            title: m === 'insight' ? 'Through a RedisInsight: for a Redis Lookup can\'t reach (a private cluster)' : undefined,
+          }, m === 'insight' ? 'RedisInsight' : m === 'basic' ? (oracle ? 'Basic' : 'Fields') : (oracle ? 'Connect string' : 'URL')))),
         h('button', { type: 'button', class: 'icon-btn form-close', title: 'Close (back to the start screen)', onclick: () => { S.selectedConn = null; renderWelcome(); } }, icon('x'))),
       c.id ? null : field('Type', typeRow), // a saved connection keeps its database type
       field('Name', inp('name', { placeholder: 'e.g. Billing — staging' })),
       field('Tag', envRow),
       modeBox,
-      redis ? field('Cluster nodes (optional)', inp('clusterNodes', { placeholder: '127.0.0.1:6380, 127.0.0.1:6381', spellcheck: 'false' }),
-        'For a cluster behind port-forwards or tunnels: the local address of every other master. Lookup finds which node is which.') : null,
-      fileBased ? null : h('div', { class: 'grid2' },
+      redis ? nfi(field('Cluster nodes (optional)', inp('clusterNodes', { placeholder: '127.0.0.1:6380, 127.0.0.1:6381', spellcheck: 'false' }),
+        'For a cluster behind port-forwards or tunnels: the local address of every other master. Lookup finds which node is which.')) : null,
+      fileBased ? null : nfi(h('div', { class: 'grid2' },
         field('User', inp('user', { placeholder: oracle ? 'HR' : engine.id === 'postgres' ? 'postgres' : engine.id === 'clickhouse' || redis ? 'default' : mongo ? 'optional' : 'root', autocomplete: 'off' })),
-        field('Password', pwBox)),
+        field('Password', pwBox))),
       oracle
         ? h('div', { class: 'grid2' },
           field('Role', sel('role', [['DEFAULT', 'Default'], ['SYSDBA', 'SYSDBA'], ['SYSOPER', 'SYSOPER'], ['SYSBACKUP', 'SYSBACKUP']])),
           h('div', { class: 'field checks' }, savePwChk, noPwChk, chk('autoCommit', 'Auto-commit by default')))
-        : h('div', { class: 'checks-row' },
+        : nfi(h('div', { class: 'checks-row' },
           fileBased ? null : savePwChk,
           fileBased ? null : noPwChk,
           redis ? chk('readOnly', 'Read-only (block write commands)')
             : mongo ? chk('readOnly', 'Read-only (block changes)')
-            : noTx ? h('span', { class: 'muted' }, 'ClickHouse has no transactions: every statement is applied at once.') : chk('autoCommit', 'Auto-commit by default')),
+            : noTx ? h('span', { class: 'muted' }, 'ClickHouse has no transactions: every statement is applied at once.') : chk('autoCommit', 'Auto-commit by default'))),
       status,
       h('div', { class: 'form-actions' },
         c.id ? h('button', { type: 'button', class: 'btn ghost danger-text', onclick: () => deleteConn(c) }, icon('trash'), 'Delete') : null,
@@ -446,6 +482,7 @@
         h('button', { type: 'button', class: 'btn', onclick: () => doSave().catch(() => {}) }, 'Save'),
         h('button', { type: 'submit', class: 'btn primary' }, 'Connect')));
     if (userPaint) form.addEventListener('input', () => userPaint()); // MongoDB: keep the connection string preview current
+    paintMode(); // again, now that the host / login fields exist (RedisInsight mode hides them)
     return form;
   }
   // ---------- Connect / workspace ----------
@@ -470,6 +507,10 @@
     // Already open in another tab? Switch there instead of opening a second session.
     if (api.focusExisting) {
       try { if (await api.focusExisting(id)) return; } catch { /* fall through and connect */ }
+    }
+    if (isInsight(c)) {
+      try { await Lookup.loadFeature('insight'); Lookup.openInsight(c); } catch (e) { toast(e.message, 'err'); }
+      return;
     }
     S.connecting = id;
     Lookup.pushState();
@@ -523,5 +564,5 @@
     if (w) document.documentElement.style.setProperty('--welcome-w', w);
   } catch { /* ignore */ }
 
-  Object.assign(Lookup, { showWelcome, connectTo, renderWelcome });
+  Object.assign(Lookup, { showWelcome, connectTo, renderWelcome, normalizeInsightUrl, isInsight });
 })();

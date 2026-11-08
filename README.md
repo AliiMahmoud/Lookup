@@ -186,6 +186,7 @@ Open more databases with the `+` in the left rail (`Ctrl+N`); each one keeps its
 - **Workbench** with formatted replies, and a **Shell** that prints exactly like redis-cli
 - **Delete keys** by pattern: counts first, asks with the exact number, then deletes in batches
 - **Overview**: commands per second, memory, clients, slow log
+- **Through RedisInsight**: for a Redis that only a RedisInsight can reach (for example one in a private Kubernetes cluster), choose **RedisInsight** at the top of the Redis form instead of Fields or URL and enter the RedisInsight address. Connecting opens that RedisInsight in the connection tab, full size, with no address bar; Lookup itself never connects to Redis. Go back and forward with ⌘[ / ⌘] (Alt+← / Alt+→ on Windows and Linux), the mouse's side buttons, a three-finger swipe on macOS, or the right-click menu; ⌘R / Ctrl+R reloads. Its sign-in and settings are kept between runs, and links that open a new window go to your browser.
 - **Redis Cluster** is detected by itself
 
 #### Redis Cluster on Kubernetes (port-forward)

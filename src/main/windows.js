@@ -59,7 +59,7 @@ function createWindow({ connectId } = {}) {
 }
 
 function addWorkspace(win, { connectId } = {}) {
-  const view = new WebContentsView({ webPreferences: webPrefs() });
+  const view = new WebContentsView({ webPreferences: { ...webPrefs(), webviewTag: true } }); // <webview>: Redis through RedisInsight (insight.js)
   view.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#16181c' : '#fbfbfa');
   const id = view.webContents.id;
   const ws = { id, win, view, state: { connected: false, title: 'New connection' } };

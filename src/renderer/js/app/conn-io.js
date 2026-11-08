@@ -58,6 +58,7 @@
         try { Object.assign(c, JSON.parse(info.LookupMongo || '{}')); } catch { /* ignore a broken field */ }
       }
       if (info.LookupPassword) c.sealedPassword = info.LookupPassword;
+      if (engine === 'redis' && info.LookupInsightUrl) return { ...c, mode: 'insight', insightUrl: info.LookupInsightUrl, host: info.hostname || 'localhost', port: Number(info.port) || 6379 };
       if (info.LookupUrl) return { ...c, mode: 'string', connectString: info.LookupUrl };
       return { ...c, mode: 'basic', host: info.hostname, port: Number(info.port) || Lookup.ENGINES[engine].port };
     }
@@ -87,6 +88,7 @@
   // Same rule as the main process: one login on one database.
   function loginKey(c) {
     if (c.engine === 'sqlite') return `sqlite|${c.file}`;
+    if (c.engine === 'redis' && c.mode === 'insight') return `redis|insight:${String(c.insightUrl || '').toLowerCase()}`;
     if (c.engine && c.engine !== 'oracle') {
       return `${c.engine}|${c.mode === 'string' ? c.connectString : `${String(c.host || '').toLowerCase()}:${c.port}/${c.database || ''}`}|${c.user || ''}`;
     }
@@ -136,6 +138,7 @@
       ['RaptorConnectionType', Lookup.ENGINES[c.engine].label],
       ['LookupEngine', c.engine],
       ['user', c.user || ''],
+      ...(c.engine === 'redis' && c.mode === 'insight' ? [['LookupInsightUrl', c.insightUrl || '']] : []),
       ...(c.mode === 'string' ? [['LookupUrl', c.connectString || '']] : [['hostname', c.host || 'localhost'], ['port', String(c.port || Lookup.ENGINES[c.engine].port)]]),
       ...(c.database ? [['LookupDatabase', String(c.database)]] : []),
       ...(c.ssl ? [['LookupSsl', c.ssl]] : []),

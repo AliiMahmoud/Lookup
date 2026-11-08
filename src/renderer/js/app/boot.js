@@ -6,7 +6,7 @@
 
   // ---------- Global keys & layout ----------
   document.addEventListener('keydown', (e) => {
-    if (!S.current || document.querySelector('.modal-back') || e.defaultPrevented) return; // already handled (e.g. by the editor)
+    if (!S.current || S.insight || document.querySelector('.modal-back') || e.defaultPrevented) return; // already handled (e.g. by the editor)
     const mod = e.ctrlKey || e.metaKey;
     const t = S.tabs.find((x) => x.id === S.active);
     if (t && t.onKey && t.onKey(e)) return;

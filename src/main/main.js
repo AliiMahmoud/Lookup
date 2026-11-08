@@ -17,6 +17,7 @@ require('./settings-menu');
 require('./ipc/shell');
 require('./ipc/db');
 require('./ipc/files');
+require('./insight');
 
 app.whenReady().then(() => {
   buildMenu();

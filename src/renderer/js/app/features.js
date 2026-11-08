@@ -9,6 +9,7 @@
       css: ['styles/redis.css'],
       js: ['../shared/redis-cli.js', '../shared/redis-commands.js', 'js/app/redis.js', 'js/app/redis-key.js', 'js/app/redis-cli.js', 'js/app/redis-overview.js'],
     },
+    insight: { css: ['styles/insight.css'], js: ['js/app/insight.js'] }, // Redis through RedisInsight: a webview
     mongodb: {
       css: ['styles/redis.css', 'styles/mongo.css'],
       js: ['../shared/mongo-lit.js', '../shared/mongo-shell.js', 'js/app/mongo.js', 'js/app/mongo-coll.js', 'js/app/mongo-shell.js'],

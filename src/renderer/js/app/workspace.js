@@ -44,6 +44,7 @@
     return true;
   }
   async function leaveWorkspace({ close = false } = {}) {
+    if (S.insight) { Lookup.closeInsight(); S.current = null; } // RedisInsight: no Redis session to end
     if (S.current) {
       if (!(await confirmLeave(close ? 'Close' : 'Disconnect'))) return;
       Lookup.saveQueryTabs();
@@ -65,11 +66,12 @@
       if (action === 'toast') { toast(message, rest.kind || 'info', 4000); return; }
       if (document.querySelector('.modal-back') && action !== 'close' && action !== 'disconnect') return;
       if (action === 'flash') { if (S.current) toast(`Already connected to ${S.current.name || S.current.user} — switched to this tab`, 'info', 2500); return; }
+      if (action === 'shown' && S.insight) { Lookup.focusInsight(); return; }
       if (action === 'shown') { if (!S.current && !document.querySelector('.connecting')) Lookup.showWelcome(); return; }
       if (action === 'sqlLog') { sqlLogPanel().toggle(); return; }
       if (action === 'close' || action === 'disconnect') { leaveWorkspace({ close: true }); return; } // disconnecting removes the tile
       else if (action === 'connect' && !S.current) Lookup.connectTo(connId);
-      else if (!S.current) return;
+      else if (!S.current || S.insight) return; // RedisInsight: the workspace commands don't apply
       else if (action === 'newQuery') Lookup.openQueryTab();
       else if (action === 'persistedQueries') Lookup.openPersistedQueries();
       else if (action === 'newShell' && Lookup.openRedisShell) Lookup.openRedisShell();
