@@ -42,6 +42,34 @@
     let ready = false; // the page is attached: its methods can be called
     const reload = () => { hideError(); if (ready) wv.reload(); else wv.setAttribute('src', home); };
     function hideError() { errBox.classList.add('hidden'); }
+    // A certificate the system doesn't trust (self-signed, a company CA): like a browser, say so and
+    // offer to proceed. Proceeding trusts that one certificate for that host, from now on.
+    async function showCertError(desc, url) {
+      let cert = null;
+      try { cert = await window.api.insightCertInfo(url || home); } catch { /* no details */ }
+      const host = (() => { try { return new URL(url || home).host; } catch { return url || home; } })();
+      const date = (ms) => (ms ? new Date(ms).toLocaleDateString() : '?');
+      errBox.innerHTML = '';
+      const proceed = async (e) => {
+        e.currentTarget.disabled = true;
+        try { await window.api.insightTrustCert(url || home, cert.fingerprint); hideError(); cover.classList.remove('hidden'); wv.loadURL(url || home); } catch (err) { e.currentTarget.disabled = false; showError(err.message, url); }
+      };
+      errBox.append(
+        h('h3', null, 'Your connection is not private'),
+        h('p', { class: 'muted' }, `The certificate of ${host} isn't trusted by this computer, so Lookup can't confirm it's the real server. That is usual for a self-signed certificate or one from a company's own authority; it can also mean someone is in the middle.`),
+        h('p', { class: 'muted mono' }, desc),
+        cert ? h('div', { class: 'ri-cert mono' },
+          h('div', null, h('span', { class: 'muted' }, 'Issued to '), cert.subject || '?'),
+          h('div', null, h('span', { class: 'muted' }, 'Issued by '), cert.issuer || '?'),
+          h('div', null, h('span', { class: 'muted' }, 'Valid '), `${date(cert.validFrom)} – ${date(cert.validTo)}`),
+          h('div', { class: 'ri-fp' }, h('span', { class: 'muted' }, 'SHA-256 '), String(cert.fingerprint || '').replace(/^sha256\//, ''))) : null,
+        h('div', { class: 'ri-actions' },
+          h('button', { class: 'btn primary', onclick: reload }, icon('refresh'), 'Try again'),
+          h('button', { class: 'btn', onclick: () => editConnection(c) }, icon('edit'), 'Edit connection'),
+          cert ? h('button', { class: 'btn ghost danger-text', title: 'Trust this certificate for this host from now on', onclick: proceed }, `Proceed to ${host} (unsafe)`) : null));
+      errBox.classList.remove('hidden');
+      cover.classList.add('hidden');
+    }
     function showError(desc, url) {
       errBox.innerHTML = '';
       errBox.append(
@@ -61,6 +89,8 @@
     wv.addEventListener('did-fail-load', (e) => {
       // -3 = aborted (another navigation started); only the page itself failing counts, not one of its frames.
       if (e.errorCode === -3 || !e.isMainFrame) return;
+      // -200 … -299: certificate errors (net::ERR_CERT_AUTHORITY_INVALID is -202).
+      if (e.errorCode <= -200 && e.errorCode > -300) { showCertError(e.errorDescription || `error ${e.errorCode}`, e.validatedURL); return; }
       showError(e.errorDescription || `error ${e.errorCode}`, e.validatedURL);
     });
     wv.addEventListener('render-process-gone', () => showError('the page stopped', wv.getURL()));

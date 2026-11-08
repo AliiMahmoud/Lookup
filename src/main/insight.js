@@ -4,11 +4,46 @@
 // the RedisInsight partition, as a plain web page with no preload and no Node), new windows to the
 // browser, a context menu, back / forward / reload (there is no address bar: keys, the mouse's side
 // buttons, a three-finger swipe on macOS), and Test in the connection form.
+const path = require('path');
+const fs = require('fs');
 const { app, shell, Menu, BrowserWindow, clipboard, session } = require('electron');
 const { wsByWc, isMac } = require('./windows');
 const { handle } = require('./ipc/handle');
 
 const PARTITION = 'persist:redisinsight'; // RedisInsight's sign-in and settings, kept between runs
+
+// Certificates the system doesn't trust (self-signed, a company CA): like a browser's "Proceed anyway",
+// the user can trust one for its host. Only that exact certificate (by fingerprint) on that host is let
+// through, only in the RedisInsight storage, and the choice is kept between runs (insight-certs.json).
+// Lookup's own database connections are not affected.
+const certsFile = () => path.join(app.getPath('userData'), 'insight-certs.json');
+let trusted = null; // { hostname: [fingerprint, …] }
+const lastBad = new Map(); // hostname → the certificate it last showed that failed: what "Proceed" trusts
+function loadTrusted() {
+  if (trusted) return trusted;
+  try { trusted = JSON.parse(fs.readFileSync(certsFile(), 'utf8')) || {}; } catch { trusted = {}; }
+  return trusted;
+}
+function saveTrusted() {
+  try { fs.writeFileSync(certsFile(), JSON.stringify(trusted, null, 1)); } catch { /* read-only data folder: trusted for this run */ }
+}
+function certInfo(cert, error) {
+  return {
+    fingerprint: cert.fingerprint, subject: cert.subjectName, issuer: cert.issuerName, error,
+    validFrom: cert.validStart * 1000, validTo: cert.validExpiry * 1000,
+  };
+}
+function verifyProc(req, cb) {
+  if (req.errorCode === 0) { cb(-3); return; } // the system trusts it: nothing to do
+  const host = req.hostname.toLowerCase();
+  if ((loadTrusted()[host] || []).includes(req.certificate.fingerprint)) { cb(0); return; }
+  lastBad.set(host, certInfo(req.certificate, req.verificationResult));
+  cb(-3); // Chromium's own verdict: the load fails with net::ERR_CERT_…, and the tab offers Proceed
+}
+app.whenReady().then(() => session.fromPartition(PARTITION).setCertificateVerifyProc(verifyProc));
+
+const hostOf = (url) => { try { return new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, ''); } catch { return ''; } };
+const isCertError = (msg) => /ERR_CERT_|ERR_SSL_/i.test(String(msg || ''));
 
 function guestMenu(guest, params, host) {
   const items = [];
@@ -126,6 +161,9 @@ handle('insight:test', async (_wcId, url) => {
   try {
     let res;
     try { res = await ses.fetch(url.replace(/\/$/, '') + '/api/info', { signal: ctl.signal, redirect: 'manual' }); } catch (e) {
+      if (!ctl.signal.aborted && isCertError(e.message)) {
+        throw new Error(`${url} has a certificate that isn't trusted (${e.message}). Connect to look at it and choose whether to proceed.`);
+      }
       throw new Error(ctl.signal.aborted ? `${url} did not answer within 10 s` : `Could not reach ${url}: ${e.message}`);
     }
     let info = null;
@@ -136,6 +174,24 @@ handle('insight:test', async (_wcId, url) => {
     if (!page.ok && page.status !== 401 && page.status !== 403) throw new Error(`${url} answered HTTP ${page.status}`);
     return { version: null, status: page.status };
   } finally { clearTimeout(timer); }
+});
+
+/** The certificate this address showed that isn't trusted (for the tab's "not private" page), or null. */
+handle('insight:certInfo', async (_wcId, url) => lastBad.get(hostOf(url)) || null);
+
+/** Proceed anyway: trust the certificate this address last showed (only that one, only for its host). */
+handle('insight:trustCert', async (_wcId, url, fingerprint) => {
+  const host = hostOf(url);
+  const bad = lastBad.get(host);
+  if (!host || !bad || bad.fingerprint !== fingerprint) throw new Error('The certificate changed: try again');
+  const t = loadTrusted();
+  t[host] = [...new Set([...(t[host] || []), fingerprint])];
+  saveTrusted();
+  lastBad.delete(host);
+  const ses = session.fromPartition(PARTITION);
+  ses.setCertificateVerifyProc(verifyProc); // again: drops verdicts Chromium cached for the untrusted certificate
+  await ses.closeAllConnections();
+  return true;
 });
 
 module.exports = { PARTITION };
