@@ -15,8 +15,3 @@ body.insight-mode #statusbar { display: none; }
   animation: ri-load 1.1s ease-in-out infinite;
 }
 @keyframes ri-load { from { background-position: -40% 0; } to { background-position: 140% 0; } }
-.ri-cert {
-  display: grid; gap: 3px; max-width: 560px; padding: 10px 12px; text-align: left; font-size: 12px;
-  border: 1px solid var(--border); border-radius: 6px;
-}
-.ri-fp { word-break: break-all; }

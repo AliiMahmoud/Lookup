@@ -40,8 +40,6 @@ contextBridge.exposeInMainWorld('api', {
   testConnection: (c) => call('conn:test', c),
   cancelTest: () => call('conn:cancelTest'),
   testInsight: (url) => call('insight:test', url),
-  insightCertInfo: (url) => call('insight:certInfo', url),
-  insightTrustCert: (url, fingerprint) => call('insight:trustCert', url, fingerprint),
   connect: (id, password) => call('db:connect', id, password),
   disconnect: () => call('db:disconnect'),
   cancel: () => call('db:cancel'),
