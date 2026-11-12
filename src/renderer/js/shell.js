@@ -131,7 +131,7 @@
     if (redis || mongo) box.append(btn(mongo ? 'Overview: server, connections, operations, replica set' : 'Overview: server, memory, clients, slow log', 'gauge', null, 'overview'));
     box.append(
       btn('Open anything (Ctrl+P)', 'search', null, 'openAnything'),
-      btn('SQL log — statements Lookup ran for you (Ctrl+Shift+L)', 'log', null, 'sqlLog'));
+      btn('SQL log — every statement run on this connection (Ctrl+Shift+L)', 'log', null, 'sqlLog'));
   }
 
   api.onWorkspaces((d) => {

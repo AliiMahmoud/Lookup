@@ -8,7 +8,7 @@
 
   let sqlLogInst = null;
   function sqlLogPanel() {
-    if (!sqlLogInst) sqlLogInst = window.SqlLog.create(document.querySelector('#workspace .main'), api);
+    if (!sqlLogInst) sqlLogInst = window.SqlLog.create(document.querySelector('#workspace .main'), api, { dialect: () => Lookup.dialect() });
     return sqlLogInst;
   }
   async function enterWorkspace() {

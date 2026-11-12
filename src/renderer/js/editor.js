@@ -1,5 +1,5 @@
 // Lightweight SQL editor: a textarea over a syntax-highlighted <pre>,
-// with line numbers, current-statement marker, indentation and autocomplete.
+// with line numbers, indentation and autocomplete.
 (function () {
   const { h } = window.U;
 
@@ -53,6 +53,72 @@
 
   const highlight = (text) => highlightLines(text).join('\n') + '\n ';
 
+  /** SQL on one line: whitespace runs become one space; strings and quoted names are kept as is; `-- x` becomes `/* x *\/`.
+   *  backslash: \' escapes a quote inside strings (MySQL, ClickHouse). */
+  function toOneLine(sql, backslash) {
+    let out = '';
+    let i = 0;
+    const n = sql.length;
+    const space = () => { if (out && !out.endsWith(' ')) out += ' '; };
+    while (i < n) {
+      const ch = sql[i];
+      if (/\s/.test(ch)) { space(); i++; continue; }
+      if (ch === '-' && sql[i + 1] === '-') {
+        let j = sql.indexOf('\n', i);
+        if (j < 0) j = n;
+        const body = sql.slice(i + 2, j).trim().replace(/\*\//g, '* /');
+        if (body) { space(); out += `/* ${body} */`; }
+        i = j;
+        continue;
+      }
+      let j = -1;
+      if (ch === '/' && sql[i + 1] === '*') {
+        j = sql.indexOf('*/', i + 2);
+        j = j < 0 ? n : j + 2;
+        out += sql.slice(i, j).replace(/\s+/g, ' '); // comments aren't data: flatten them too
+        i = j;
+        continue;
+      }
+      if ((ch === 'q' || ch === 'Q') && sql[i + 1] === "'" && sql[i + 2] === '[') { j = sql.indexOf("]'", i + 3); j = j < 0 ? n : j + 2; }
+      else if (ch === "'" || ch === '"' || ch === '`') {
+        j = i + 1;
+        while (j < n) {
+          if (backslash && sql[j] === '\\') { j += 2; continue; }
+          if (sql[j] === ch) { if (sql[j + 1] === ch) { j += 2; continue; } j++; break; }
+          j++;
+        }
+      }
+      if (j > i) { out += sql.slice(i, j); i = j; continue; }
+      out += ch;
+      i++;
+    }
+    return out.trim();
+  }
+
+  /** Each statement of a script on its own line, with a blank line between statements. Comments between statements
+   *  stay on their own lines; one at the end of a statement's line stays there. */
+  function oneLinePerStatement(text, dialect) {
+    const backslash = dialect === 'mysql' || dialect === 'clickhouse';
+    const list = window.SqlSplit.split(text, dialect);
+    if (!list.length) return text;
+    const out = [];
+    const gap = (g, between) => {
+      const lines = g.split('\n');
+      const first = lines.shift().trim(); // rest of the previous statement's line (e.g. `-- note` after `;`)
+      if (first) { if (out.length) out[out.length - 1] += ' ' + first; else out.push(first); }
+      if (between) out.push(''); // a blank line after each query
+      for (const l of lines) if (l.trim()) out.push(l.trim());
+    };
+    let pos = 0;
+    list.forEach((s, i) => {
+      gap(text.slice(pos, s.start), i > 0);
+      out.push(toOneLine(text.slice(s.start, s.end), backslash));
+      pos = s.end;
+    });
+    gap(text.slice(pos), false);
+    return out.join('\n');
+  }
+
   // The highlight layer holds only the lines near the viewport, redrawn each time the view has scrolled this many lines.
   const HL_STEP = 20;
 
@@ -71,8 +137,10 @@
       this.ta = h('textarea', { class: 'ed-input', spellcheck: 'false', wrap: 'off', autocapitalize: 'off', autocomplete: 'off' });
       this.ta.value = value;
       this.pop = h('div', { class: 'ac hidden' });
-      this.code = h('div', { class: 'ed-code' }, this.pre, this.ta, this.pop);
+      this.marks = h('div', { class: 'ed-marks', 'aria-hidden': 'true' }); // find matches, under the text
+      this.code = h('div', { class: 'ed-code' }, this.marks, this.pre, this.ta, this.pop);
       this.el = h('div', { class: 'editor' }, this.gutter, this.code);
+      this.buildFind();
       this.lines = 0;
       this.ac = null;
       this.viewH = 0; // editor height, kept by the observer below (0 until the editor is on screen)
@@ -81,6 +149,7 @@
       this.ta.addEventListener('input', (e) => {
         this.render();
         this.onChange && this.onChange(this.ta.value);
+        if (this.find) this.findSoon();
         if (this.inserting) return;
         if (e.inputType === 'insertText' && e.data && /[\w$#.]/.test(e.data)) this.suggest(false);
         else if (e.inputType && e.inputType.startsWith('delete') && this.ac) this.suggest(false);
@@ -89,16 +158,162 @@
       this.ta.addEventListener('scroll', () => this.sync());
       this.ta.addEventListener('keydown', (e) => this.onKey(e));
       this.ta.addEventListener('blur', () => setTimeout(() => this.hideAc(), 120));
-      const mark = window.U.debounce(() => this.markStatement(), 80);
-      this.ta.addEventListener('keyup', mark);
-      this.ta.addEventListener('mouseup', mark);
-      this.ta.addEventListener('focus', mark);
       this.render();
     }
 
     get value() { return this.ta.value; }
     set value(v) { this.ta.value = v; this.render(); }
     focus() { this.ta.focus(); }
+
+    // ---------- Find (Ctrl+F) ----------
+    buildFind() {
+      const { icon } = window.U;
+      this.findInput = h('input', { class: 'input xs ed-find-input', placeholder: 'Find', spellcheck: 'false', autocomplete: 'off' });
+      this.findCount = h('span', { class: 'ed-find-count' });
+      this.findCase = h('button', { class: 'icon-btn xs ed-find-case', title: 'Match case', onmousedown: (e) => e.preventDefault(),
+        onclick: () => { this.findCase.classList.toggle('on'); this.runFind(true); } }, 'Aa');
+      const btn = (title, ic, cls, fn) => h('button', { class: 'icon-btn xs', title, onmousedown: (e) => e.preventDefault(), onclick: fn }, icon(ic, cls));
+      this.findBar = h('div', { class: 'ed-find hidden' }, icon('search'), this.findInput, this.findCount, this.findCase,
+        btn('Previous match (Shift+Enter)', 'chevron', 'up', () => this.findStep(-1)),
+        btn('Next match (Enter)', 'chevron', 'down', () => this.findStep(1)),
+        btn('Close (Esc)', 'x', null, () => this.closeFind()));
+      this.el.append(this.findBar);
+      this.findSoon = window.U.debounce(() => this.runFind(false), 120);
+      this.findInput.addEventListener('input', () => this.runFind(true));
+      this.findInput.addEventListener('keydown', (e) => {
+        const mod = e.ctrlKey || e.metaKey;
+        if (e.key === 'Enter' || e.key === 'F3' || (mod && e.key.toLowerCase() === 'g')) { e.preventDefault(); this.findStep(e.shiftKey ? -1 : 1); return; }
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.closeFind(); return; }
+        if (mod && e.key.toLowerCase() === 'f') { e.preventDefault(); this.findInput.select(); }
+      });
+    }
+
+    /** Opens the find bar, starting from the selected text (one line) if any. */
+    openFind() {
+      const sel = this.selection();
+      if (sel && !sel.includes('\n')) this.findInput.value = sel;
+      this.find = this.find || { list: [], cur: -1 };
+      this.findBar.classList.remove('hidden');
+      this.findInput.focus();
+      this.findInput.select();
+      this.runFind(true);
+    }
+
+    closeFind() {
+      if (!this.find) return;
+      this.find = null;
+      this.findBar.classList.add('hidden');
+      this.marks.innerHTML = '';
+      this.ta.focus(); // the last match stays selected
+    }
+
+    /** Finds every match; `jump` selects the first one at or after the cursor (as you type in the box). */
+    runFind(jump) {
+      if (!this.find) return;
+      const q = this.findInput.value;
+      const v = this.ta.value;
+      const list = [];
+      if (q) {
+        const hay = this.findCase.classList.contains('on') ? v : v.toLowerCase();
+        const needle = this.findCase.classList.contains('on') ? q : q.toLowerCase();
+        for (let i = hay.indexOf(needle); i >= 0 && list.length < 20000; i = hay.indexOf(needle, i + needle.length)) list.push(i);
+      }
+      const prev = this.find.list[this.find.cur];
+      this.find.list = list;
+      this.find.len = q.length;
+      if (jump) {
+        const from = Math.min(this.ta.selectionStart, this.ta.selectionEnd);
+        const i = list.findIndex((p) => p >= from);
+        this.find.cur = list.length ? (i < 0 ? 0 : i) : -1;
+        if (this.find.cur >= 0) this.showMatch();
+      } else {
+        // Text edited: keep the current match where it was, without moving the cursor.
+        const i = list.findIndex((p) => p >= (prev ?? 0));
+        this.find.cur = list.length ? (i < 0 ? list.length - 1 : i) : -1;
+      }
+      this.findInput.classList.toggle('none', !!q && !list.length);
+      this.paintFindCount();
+      this.paintMarks();
+    }
+
+    findStep(dir) {
+      if (!this.find) { this.openFind(); return; }
+      const n = this.find.list.length;
+      if (!n) return;
+      this.find.cur = (this.find.cur + dir + n) % n;
+      this.showMatch();
+      this.paintFindCount();
+      this.paintMarks();
+    }
+
+    paintFindCount() {
+      const { list, cur } = this.find;
+      this.findCount.textContent = !this.findInput.value ? '' : list.length ? `${cur + 1} of ${list.length}${list.length >= 20000 ? '+' : ''}` : 'No results';
+    }
+
+    /** Selects the current match and scrolls it into view (keeps the focus in the find box). */
+    showMatch() {
+      const a = this.find.list[this.find.cur];
+      const b = a + this.find.len;
+      this.ta.setSelectionRange(a, b);
+      const m = this.metrics();
+      const v = this.ta.value;
+      const line = v.slice(0, a).split('\n').length - 1;
+      const col = this.visualCol(v, a);
+      const y = m.pt + line * m.lh;
+      if (y < this.ta.scrollTop || y + m.lh > this.ta.scrollTop + this.ta.clientHeight) this.ta.scrollTop = y - this.ta.clientHeight / 2;
+      const x = m.pl + col * m.charW;
+      const w = this.find.len * m.charW;
+      if (x < this.ta.scrollLeft || x + w > this.ta.scrollLeft + this.ta.clientWidth) this.ta.scrollLeft = Math.max(0, x - this.ta.clientWidth / 3);
+      this.sync();
+    }
+
+    /** Column on screen of position pos (tabs count to the next tab stop). */
+    visualCol(v, pos) {
+      const ls = v.lastIndexOf('\n', pos - 1) + 1;
+      let col = 0;
+      for (let i = ls; i < pos; i++) col = v[i] === '\t' ? (Math.floor(col / 4) + 1) * 4 : col + 1;
+      return col;
+    }
+
+    metrics() {
+      const cs = getComputedStyle(this.ta);
+      if (!this.charW) {
+        // Not cs.font: with font-variant-ligatures set, Chromium reports that shorthand as '' (the probe would measure the UI font).
+        const probe = h('span', { style: { fontFamily: cs.fontFamily, fontSize: cs.fontSize, fontWeight: cs.fontWeight, letterSpacing: cs.letterSpacing,
+          fontVariantLigatures: 'none', position: 'absolute', visibility: 'hidden', whiteSpace: 'pre' } }, 'M'.repeat(50));
+        document.body.append(probe);
+        this.charW = probe.getBoundingClientRect().width / 50;
+        probe.remove();
+      }
+      return { charW: this.charW, lh: parseFloat(cs.lineHeight) || 20, pl: parseFloat(cs.paddingLeft) || 0, pt: parseFloat(cs.paddingTop) || 0 };
+    }
+
+    /** Draws the matches in view (behind the text). */
+    paintMarks() {
+      this.marks.innerHTML = '';
+      if (!this.find || !this.find.list.length || !this.ta.clientHeight) return;
+      const { list, cur, len } = this.find;
+      const m = this.metrics();
+      const v = this.ta.value;
+      const t = this.ta.scrollTop;
+      const firstLine = Math.floor(t / m.lh) - 2;
+      const lastLine = Math.ceil((t + this.ta.clientHeight) / m.lh) + 2;
+      // Line of each match, counted incrementally from the start of the text.
+      let line = 0;
+      let at = 0;
+      const frag = document.createDocumentFragment();
+      for (let i = 0; i < list.length; i++) {
+        const p = list[i];
+        for (let j = v.indexOf('\n', at); j >= 0 && j < p; j = v.indexOf('\n', j + 1)) { line++; at = j + 1; }
+        if (line < firstLine) continue;
+        if (line > lastLine) break;
+        const x = m.pl + this.visualCol(v, p) * m.charW - this.ta.scrollLeft;
+        const y = m.pt + line * m.lh - t;
+        frag.append(h('div', { class: 'ed-mark' + (i === cur ? ' cur' : ''), style: { left: x + 'px', top: y + 'px', width: Math.max(2, len * m.charW) + 'px', height: m.lh + 'px' } }));
+      }
+      this.marks.append(frag);
+    }
 
     // Editor-only zoom (Ctrl+= / Ctrl+- / Ctrl+0 while the editor has focus). Returns the percentage.
     get zoom() { return this._zoom || 100; }
@@ -136,7 +351,6 @@
         let s = '';
         for (let i = 1; i <= n; i++) s += `<div>${i}</div>`;
         this.gutter.innerHTML = s;
-        this.markStatement();
       }
       this.sync();
     }
@@ -153,6 +367,7 @@
       }
       this.pre.style.transform = `translate(${-l}px, ${first * lh - t}px)`;
       this.gutter.style.transform = `translateY(${-t}px)`;
+      if (this.find) this.paintMarks();
     }
 
     selection() {
@@ -164,20 +379,8 @@
       return window.SqlSplit.statementAt(this.ta.value, this.ta.selectionStart, this.opts.dialect ? this.opts.dialect() : undefined);
     }
 
-    markStatement() {
-      const kids = this.gutter.children;
-      for (const k of kids) k.classList.remove('cur');
-      if (this.selection()) return;
-      const st = this.currentStatement();
-      if (!st) return;
-      const v = this.ta.value;
-      const a = v.slice(0, st.start).split('\n').length - 1;
-      const b = v.slice(0, Math.max(st.start, st.end - 1)).split('\n').length - 1;
-      for (let i = a; i <= b && i < kids.length; i++) kids[i].classList.add('cur');
-    }
-
     insert(text) {
-      // execCommand keeps the native undo stack intact.
+      // One undo step in this field's own history (see undo.js).
       this.inserting = true;
       try {
         if (!document.execCommand('insertText', false, text)) {
@@ -187,6 +390,55 @@
       } finally {
         this.inserting = false;
       }
+    }
+
+    /** Ctrl+L: the statement at the cursor (or each statement in the selection) on a single line; one undo step. */
+    oneLine() {
+      const v = this.ta.value;
+      let a = this.ta.selectionStart;
+      let b = this.ta.selectionEnd;
+      const whole = a === b;
+      if (whole) {
+        const st = this.currentStatement();
+        if (!st) return;
+        a = st.start; b = st.end;
+      }
+      const part = v.slice(a, b);
+      const lead = part.match(/^\s*/)[0];
+      const trail = part.slice(lead.length).match(/\s*$/)[0];
+      const core = part.slice(lead.length, part.length - trail.length);
+      if (!core) return;
+      const flat = oneLinePerStatement(core, this.opts.dialect ? this.opts.dialect() : undefined);
+      const gap = this.gapAfter(b - trail.length);
+      const next = flat + gap.extra;
+      if (next === core) return;
+      const caret = this.ta.selectionStart;
+      this.ta.setSelectionRange(a + lead.length, b - trail.length + gap.swallow);
+      this.insert(next);
+      if (whole) this.ta.setSelectionRange(Math.min(caret, a + lead.length + next.length), Math.min(caret, a + lead.length + next.length));
+      else this.ta.setSelectionRange(a + lead.length, a + lead.length + next.length);
+    }
+
+    /** What to add after a query ending at `pos` so a blank line separates it from the text after it:
+     *  { extra: text to put in place of `swallow` characters after pos }. Nothing when the next line is already
+     *  empty or nothing follows. A comment on the query's last line (`select 1; -- note`) stays on that line. */
+    gapAfter(pos) {
+      const rest = this.ta.value.slice(pos);
+      const none = { extra: '', swallow: 0 };
+      if (!rest.trim()) return none;
+      let sp = rest.match(/^[ \t\r]*/)[0].length;
+      let keep = '';
+      if (/^(--|\/\*)/.test(rest.slice(sp))) {
+        const eol = rest.indexOf('\n');
+        const line = rest.slice(0, eol < 0 ? rest.length : eol);
+        if (eol < 0 || (line.trim().startsWith('/*') && !line.trim().endsWith('*/'))) return none;
+        keep = line.replace(/\s+$/, '');
+        sp = eol;
+      }
+      const r = rest.slice(sp);
+      if (r[0] !== '\n') return { extra: keep + '\n\n', swallow: sp }; // next query on the same line
+      const nextLine = r.slice(1).match(/^[^\n]*/)[0];
+      return nextLine.trim() ? { extra: keep + '\n', swallow: sp } : none;
     }
 
     lineRange() {
@@ -219,6 +471,9 @@
         if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); this.accept(); return; }
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.hideAc(); return; }
       }
+      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') { e.preventDefault(); this.openFind(); return; }
+      if (e.key === 'F3' || (mod && !e.altKey && e.key.toLowerCase() === 'g')) { e.preventDefault(); this.findStep(e.shiftKey ? -1 : 1); return; }
+      if (e.key === 'Escape' && this.find) { e.preventDefault(); e.stopPropagation(); this.closeFind(); return; }
       if (mod && e.key === 'Enter') {
         e.preventDefault();
         if (e.shiftKey) this.onRunAll && this.onRunAll();
@@ -226,6 +481,7 @@
         return;
       }
       if (mod && e.key === ' ') { e.preventDefault(); this.suggest(true); return; }
+      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'l') { e.preventDefault(); this.hideAc(); this.oneLine(); return; }
       if (mod && (e.key.toLowerCase() === 'b' || e.key.toLowerCase() === 'i' || (e.shiftKey && e.key.toLowerCase() === 'f'))) {
         e.preventDefault();
         this.onFormat && this.onFormat();
@@ -323,17 +579,8 @@
       const before = this.ta.value.slice(0, pos).split('\n');
       const line = before.length - 1;
       const col = before[before.length - 1].length;
-      const cs = getComputedStyle(this.ta);
-      if (!this.charW) {
-        const probe = h('span', { style: { font: cs.font, position: 'absolute', visibility: 'hidden', whiteSpace: 'pre' } }, 'M'.repeat(50));
-        document.body.append(probe);
-        this.charW = probe.getBoundingClientRect().width / 50;
-        probe.remove();
-      }
-      const lh = parseFloat(cs.lineHeight) || 20;
-      const pl = parseFloat(cs.paddingLeft) || 0;
-      const pt = parseFloat(cs.paddingTop) || 0;
-      return { x: pl + col * this.charW - this.ta.scrollLeft, y: pt + (line + 1) * lh - this.ta.scrollTop + 2 };
+      const { charW, lh, pl, pt } = this.metrics();
+      return { x: pl + col * charW - this.ta.scrollLeft, y: pt + (line + 1) * lh - this.ta.scrollTop + 2 };
     }
 
     accept() {

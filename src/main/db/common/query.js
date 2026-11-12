@@ -4,6 +4,7 @@
 const DEFAULT_MAX_ROWS = 500;
 const { get } = require('./sessions');
 const { lostMessage, markLost } = require('./health');
+const { startEntry } = require('./sql-log');
 
 /** Runs statements one by one; stops at the first error. */
 async function run(winId, statements, { maxRows = DEFAULT_MAX_ROWS } = {}) {
@@ -23,14 +24,18 @@ async function run(winId, statements, { maxRows = DEFAULT_MAX_ROWS } = {}) {
   try {
     for (const sql of statements) {
       const t0 = Date.now();
+      // Engines run the user's SQL through raw driver calls, which the SQL log doesn't see: log it here.
+      const logged = s.log ? startEntry(s.log, sql, { user: true }) : () => {};
       try {
         const out = await s.engine.runStatement(s, sql, { maxRows, g });
+        logged(out.kind === 'rows' ? { rows: out.rows.length } : typeof out.rowsAffected === 'number' ? { affected: out.rowsAffected } : {});
         out.ms = Date.now() - t0;
         out.sql = sql;
         out.output = s.engine.readOutput ? await g(s.engine.readOutput(s)) : [];
         if (s.engine.inTransaction) out.txOpen = s.engine.inTransaction(s);
         results.push(out);
       } catch (e) {
+        logged({ error: String(e.message).split('\n')[0] });
         if (s.engine.isLostError(e)) markLost(winId, s, lostMessage(e));
         const err = { kind: 'error', sql, ms: Date.now() - t0, message: e.message, code: e.code, offset: e.offset, lost: !!s.lost };
         if (s.engine.isCancelError && s.engine.isCancelError(e)) err.cancelled = true;

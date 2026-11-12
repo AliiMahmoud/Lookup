@@ -430,10 +430,14 @@ const t = async (name, fn) => { await fn(); passed++; console.log('  ok ', name)
     await db.reconnect(W);
   });
 
-  await t('the SQL log records what Lookup ran (not the user queries)', async () => {
+  await t('the SQL log records what Lookup ran and the user queries, marked as such', async () => {
+    await db.run(W, ['select 7', 'select nosuchcol from lookup_test.orders']);
     const log = db.sqlLog(W);
-    assert.ok(log.entries.some((e) => /current_setting\('server_version'\)/.test(e.sql)));
-    assert.ok(!log.entries.some((e) => /select 7/.test(e.sql)));
+    assert.ok(log.entries.some((e) => /current_setting\('server_version'\)/.test(e.sql) && !e.user));
+    const mine = log.entries.filter((e) => e.user);
+    assert.deepStrictEqual(mine.map((e) => e.sql), ['select 7', 'select nosuchcol from lookup_test.orders']);
+    assert.strictEqual(mine[0].rows, 1);
+    assert.match(mine[1].error, /nosuchcol/);
   });
 
   await db.disconnect(W);

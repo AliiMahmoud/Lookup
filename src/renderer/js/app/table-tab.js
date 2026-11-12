@@ -40,8 +40,7 @@
     const prev = h('button', { class: 'tool', title: 'Previous page', onclick: () => tab.page(-1) }, icon('chevron', 'flip'));
     const next = h('button', { class: 'tool', title: 'Next page', onclick: () => tab.page(1) }, icon('chevron'));
     const timing = h('span', { class: 'muted' });
-    const footer = h('div', { class: 'pager' }, prev, next, pagerInfo, pageSize, h('div', { class: 'spacer' }), timing,
-      h('button', { class: 'tool', title: 'Copy the SQL used for this page', onclick: () => tab.data && api.copy(tab.data.sql) }, icon('copy')));
+    const footer = h('div', { class: 'pager' }, prev, next, pagerInfo, pageSize, h('div', { class: 'spacer' }), timing);
     // Engines without grid editing yet: say so once, above the rows.
     // Engines that can't edit rows say so once, above the rows; an engine that can may still say why this table
     // can't (no primary key, file opened read-only) once its data has loaded.
@@ -243,6 +242,13 @@
         const label = redo ? tab.grid.redo() : tab.grid.undo();
         if (label) toast(`${redo ? 'Redo' : 'Undo'}: ${label}`, 'info', 1800);
         tab.grid.el.focus({ preventScroll: true });
+        return true;
+      }
+      // Space on the focused grid opens (or closes) the row details for the selected row.
+      if (e.key === ' ' && !mod && !e.altKey && !e.shiftKey && tab.grid && e.target === tab.grid.el && tab.grid.sel.r >= 0) {
+        e.preventDefault();
+        tab.showDetails = !tab.showDetails;
+        tab.paintDetails();
         return true;
       }
       if (e.key === 'F5' || (mod && e.key.toLowerCase() === 'r')) { e.preventDefault(); tab.reload(); return true; }

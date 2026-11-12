@@ -160,5 +160,69 @@ const { trackConnection, newLog } = require('../src/main/db');
     assert.strictEqual(log.entries[0].rows, 2);
     assert.strictEqual(log.entries[1].error, 'ORA-00942: table or view does not exist');
   });
+
+  // Query-tab statements go through raw driver calls; the shared runner logs them (marked `user`), stopping at an error.
+  const sessions = require('../src/main/db/common/sessions');
+  const runLog = newLog();
+  const runConn = trackConnection({ execute: async () => ({ rows: [[1]] }), commit: async () => {}, rollback: async () => {} }, runLog);
+  sessions.sessions.set('log-test', { conn: runConn, log: runLog, autoCommit: true, busy: false, engine: {
+    isLostError: () => false,
+    async runStatement(s, sql) {
+      await s.conn.execute('SELECT internal FROM dual');
+      if (/fail/.test(sql)) throw new Error('ORA-00942: table or view does not exist\nmore');
+      return /^select/i.test(sql) ? { kind: 'rows', rows: [[1], [2]] } : { kind: 'exec', rowsAffected: 3 };
+    },
+  } });
+  await require('../src/main/db/common/query').run('log-test', ['select 1 from dual', 'update t set a = 1', 'select * from fail', 'select never']);
+  sessions.sessions.delete('log-test');
+  t('SQL log records the user queries from query tabs, in run order', () => {
+    const mine = runLog.entries.filter((e) => e.user);
+    assert.deepStrictEqual(mine.map((e) => e.sql), ['select 1 from dual', 'update t set a = 1', 'select * from fail']);
+    assert.deepStrictEqual([mine[0].rows, mine[1].affected, mine[2].error], [2, 3, 'ORA-00942: table or view does not exist']);
+    assert.deepStrictEqual(runLog.entries.map((e) => e.id), runLog.entries.map((_, i) => i + 1)); // numbered as added
+  });
+
+  t('SQL log text runs again as a script (Oracle PL/SQL blocks end with /)', () => {
+    global.window = { U: { h() {}, icon() {}, toast() {} }, SqlSplit: require('../src/shared/sqlsplit') };
+    require('../src/renderer/js/sqllog.js');
+    const scripts = {
+      oracle: "select * from dual;\ninsert into t values (1, 'a;b');\nBEGIN\n  dbms_output.put_line('hi');\nEND;\n/\nDECLARE x number; BEGIN x := 1; END;\n/\ncreate or replace procedure p as\nbegin\n  null;\nend;\n/\nselect 2 from dual",
+      postgres: "BEGIN;\ncreate function f() returns int as $$ begin return 1; end; $$ language plpgsql;\nselect 'x;y';\nCOMMIT",
+      mysql: "select 1;\ninsert into t values ('a;b');\nselect 3",
+    };
+    for (const [d, script] of Object.entries(scripts)) {
+      const stmts = window.SqlSplit.split(script, d).map((s) => s.text.trim());
+      const text = stmts.map((sql, i) => window.SqlLog.entryText({ id: i + 1, at: 0, ms: 1, sql, user: true }, d)).join('\n');
+      const again = window.SqlSplit.split(text, d).map((s) => s.text.replace(/^(--[^\n]*\n)+/, '').trim());
+      assert.deepStrictEqual(again, stmts, d);
+    }
+    delete global.window;
+  });
+  t('undo / redo is per field, and a change from code is undone first', () => {
+    const on = {};
+    const saved = { document: global.document, Event: global.Event, performance: global.performance };
+    global.document = { addEventListener: (type, f) => { on[type] = f; } };
+    global.Event = class { constructor(type) { this.type = type; } };
+    global.performance = { now: () => Date.now() };
+    delete require.cache[require.resolve('../src/renderer/js/undo.js')];
+    require('../src/renderer/js/undo.js');
+    const field = (tag) => ({ tagName: tag, value: '', getAttribute: () => 'text', setSelectionRange() {}, dispatchEvent(e) { e.target = this; on.input(e); } });
+    const typeIn = (el, s) => { on.focusin({ target: el }); for (const c of s) { on.keydown({ target: el, key: c }); el.value += c; on.input({ target: el, inputType: 'insertText', data: c }); } };
+    const key = (el, k, shiftKey = false) => on.keydown({ target: el, key: k, ctrlKey: true, shiftKey, preventDefault() {} });
+    const search = field('INPUT');
+    const editor = field('TEXTAREA');
+    typeIn(search, 'users');
+    typeIn(editor, 'select 1');
+    key(editor, 'z');
+    assert.deepStrictEqual([editor.value, search.value], ['select ', 'users']); // the editor's undo leaves the search box alone
+    key(editor, 'y');
+    assert.strictEqual(editor.value, 'select 1');
+    editor.value = 'set from code';
+    key(editor, 'z');
+    assert.strictEqual(editor.value, 'select 1');
+    key(editor, 'z', true);
+    assert.strictEqual(editor.value, 'set from code');
+    Object.assign(global, saved);
+  });
   console.log(`\n${passed} tests passed`);
 })();

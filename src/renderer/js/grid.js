@@ -404,8 +404,9 @@
       const move = (dr, dc) => {
         e.preventDefault();
         if (!this.total) return;
-        const nr = Math.min(Math.max(0, (r < 0 ? 0 : r) + dr), this.total - 1);
-        const nc = Math.min(Math.max(0, (c < 0 ? 0 : c) + dc), this.columns.length - 1);
+        // Nothing selected yet: the first key lands on the first cell.
+        const nr = r < 0 ? 0 : Math.min(Math.max(0, r + dr), this.total - 1);
+        const nc = c < 0 ? 0 : Math.min(Math.max(0, c + dc), this.columns.length - 1);
         if (e.shiftKey && e.key !== 'Tab' && r >= 0) {
           this.sel = { r: nr, c: nc };
           this.extra.clear();
@@ -429,7 +430,7 @@
       if (e.key === 'Home') return move(0, -this.columns.length);
       if (e.key === 'End') return move(0, this.columns.length);
       if (mod && e.key.toLowerCase() === 'a') { e.preventDefault(); this.selectAll(); return; }
-      if (e.key === 'Escape' && (this.selRows.size || this.isMulti())) { e.preventDefault(); this.setSelection(this.sel, this.sel); return; }
+      if (e.key === 'Escape' && r >= 0 && (this.selRows.size || this.isMulti())) { e.preventDefault(); this.setSelection(this.sel, this.sel); return; }
       if (r < 0) return;
       if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); this.edit(r, c); return; }
       if (mod && e.key.toLowerCase() === 'c') {

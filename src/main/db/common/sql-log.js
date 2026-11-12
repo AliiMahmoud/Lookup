@@ -1,9 +1,23 @@
-// SQL log: records the statements Lookup runs by itself (not the user's own queries).
+// SQL log: records every statement run on a connection: Lookup's own (through conn.execute) and the user's
+// query-tab statements (logged by common/query.js, since engines run those through raw driver calls).
 const { sessions } = require('./sessions');
 
 const LOG_MAX = 3000;
 
 function newLog() { return { seq: 0, entries: [] }; }
+
+/** Starts an entry; the returned function adds it once the statement finished. It is numbered then, so the panel
+ *  (which asks for entries after the last number it saw) never misses one that took longer than another. */
+function startEntry(log, sql, extra) {
+  const entry = { at: Date.now(), sql: String(sql).trim(), ...extra };
+  return (result) => {
+    Object.assign(entry, result, { id: ++log.seq, ms: Date.now() - entry.at });
+    log.entries.push(entry);
+    if (log.entries.length > LOG_MAX) log.entries.shift();
+  };
+}
+
+const firstLine = (e) => String(e && e.message).split('\n')[0];
 
 function plainBinds(b) {
   if (!b || typeof b !== 'object') return null;
@@ -19,25 +33,20 @@ function plainBinds(b) {
   return keys.length ? Object.fromEntries(keys.map((k) => [k, conv(b[k])])) : null;
 }
 
-/** Records every execute() on this connection; conn.rawExecute skips the log (used for user queries). */
+/** Records every execute() on this connection; conn.rawExecute skips the log. */
 function trackConnection(conn, log) {
   const raw = conn.execute.bind(conn);
   conn.rawExecute = raw;
   conn.execute = async (...args) => {
-    const t0 = Date.now();
-    const entry = { id: ++log.seq, at: t0, sql: String(args[0]).trim(), binds: plainBinds(args[1]) };
-    const push = () => { log.entries.push(entry); if (log.entries.length > LOG_MAX) log.entries.shift(); };
+    const done = startEntry(log, args[0], { binds: plainBinds(args[1]) });
     try {
       const r = await raw(...args);
-      entry.ms = Date.now() - t0;
-      if (r && Array.isArray(r.rows)) entry.rows = r.rows.length;
-      else if (r && typeof r.rowsAffected === 'number') entry.affected = r.rowsAffected;
-      push();
+      if (r && Array.isArray(r.rows)) done({ rows: r.rows.length });
+      else if (r && typeof r.rowsAffected === 'number') done({ affected: r.rowsAffected });
+      else done({});
       return r;
     } catch (e) {
-      entry.ms = Date.now() - t0;
-      entry.error = String(e.message).split('\n')[0];
-      push();
+      done({ error: firstLine(e) });
       throw e;
     }
   };
@@ -45,12 +54,8 @@ function trackConnection(conn, log) {
   for (const op of ['commit', 'rollback']) {
     const fn = conn[op].bind(conn);
     conn[op] = async () => {
-      const t0 = Date.now();
-      const entry = { id: ++log.seq, at: t0, sql: op.toUpperCase() };
-      try { await fn(); entry.ms = Date.now() - t0; } catch (e) { entry.ms = Date.now() - t0; entry.error = String(e.message).split('\n')[0]; throw e; } finally {
-        log.entries.push(entry);
-        if (log.entries.length > LOG_MAX) log.entries.shift();
-      }
+      const done = startEntry(log, op.toUpperCase());
+      try { await fn(); done({}); } catch (e) { done({ error: firstLine(e) }); throw e; }
     };
   }
   return conn;
@@ -67,4 +72,4 @@ function clearSqlLog(winId) {
   if (s) s.log.entries = [];
 }
 
-module.exports = { newLog, trackConnection, sqlLog, clearSqlLog };
+module.exports = { newLog, startEntry, trackConnection, sqlLog, clearSqlLog };

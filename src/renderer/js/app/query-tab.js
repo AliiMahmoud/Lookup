@@ -77,12 +77,14 @@
     const runAllBtn = h('button', { class: 'btn sm', title: 'Run all (Ctrl+Shift+Enter)', onclick: () => runQuery(tab, 'all') }, icon('playAll'), 'Run all');
     const stopBtn = h('button', { class: 'btn sm hidden', title: 'Stop: ask the database to cancel the query', onclick: () => stopQuery(tab) }, icon('stop'), h('span', null, 'Stop'));
     const explainBtn = h('button', { class: 'btn sm ghost', title: 'Explain plan for current statement', onclick: () => runQuery(tab, 'explain') }, 'Explain');
-    const formatBtn = h('button', { class: 'btn sm ghost', title: 'Beautify SQL (Ctrl+B) — formats the selection, or the whole editor', onclick: () => beautify(tab) }, icon('format'), 'Beautify');
+    const formatBtn = h('button', { class: 'btn sm ghost', title: 'Beautify SQL (Ctrl+B) — formats the statement at the cursor, or the selection', onclick: () => beautify(tab) }, icon('format'), 'Beautify');
+    const oneLineBtn = h('button', { class: 'btn sm ghost', title: 'One line (Ctrl+L) — puts the statement at the cursor on one line (with a selection: each selected statement on its own line)', onclick: () => { tab.editor.focus(); tab.editor.oneLine(); } }, icon('oneLine'), 'One line');
     const maxRows = h('select', { class: 'input xs', title: 'Row limit' },
       [100, 500, 1000, 5000].map((n) => h('option', { value: n }, `Limit ${n}`)), h('option', { value: '0' }, 'No limit'));
     maxRows.value = '500';
-    const toolbar = h('div', { class: 'toolbar' }, runBtn, runAllBtn, stopBtn, explainBtn, h('div', { class: 'tb-sep' }), formatBtn, h('div', { class: 'spacer' }),
+    const toolbar = h('div', { class: 'toolbar' }, runBtn, runAllBtn, stopBtn, explainBtn, h('div', { class: 'tb-sep' }), formatBtn, oneLineBtn, h('div', { class: 'spacer' }),
       maxRows,
+      h('button', { class: 'tool', title: 'Find (Ctrl+F)', onclick: () => (tab.editor.find ? tab.editor.closeFind() : tab.editor.openFind()) }, icon('search')),
       h('button', { class: 'tool', title: 'Query history', onclick: () => showHistory(tab) }, icon('history')),
       h('button', { class: 'tool', title: 'Open .sql file', onclick: async () => { const f = await api.openSql(); if (f) { tab.editor.value = f.text; if (!tab.persisted) { tab.title = f.name; Lookup.renderTabs(); } saveQueryTabs(); } } }, icon('open')),
       h('button', { class: 'tool', title: 'Save as .sql (Ctrl+Shift+S)', onclick: () => saveSqlFile(tab) }, icon('save')));
@@ -102,7 +104,8 @@
     const resTabs = h('div', { class: 'res-tabs' });
     const resBody = h('div', { class: 'res-body' }, h('div', { class: 'empty-small center' }, 'Run a query to see results here'));
     const resFoot = h('div', { class: 'pager' });
-    const results = h('div', { class: 'results' }, resTabs, resBody, resFoot);
+    // tabindex: a click on the messages also puts the focus in the results, for Esc.
+    const results = h('div', { class: 'results', tabindex: '-1' }, resTabs, resBody, resFoot);
     // Results stay hidden until the first run, and can be closed with the × on their tab bar.
     tab.el = h('div', { class: 'tabview query no-results' }, toolbar, edHost, split, results);
     tab.parts = { resTabs, resBody, resFoot, runBtn, runAllBtn, stopBtn, explainBtn, maxRows, edHost };
@@ -117,6 +120,17 @@
       addEventListener('mouseup', up);
     });
 
+    // Esc in the results closes them and goes back to the editor (the grid uses a first Esc to drop a multi-selection).
+    tab.onKey = (e) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f' && !tab.editor.findBar.contains(e.target)) { e.preventDefault(); tab.editor.openFind(); return true; }
+      if (e.key !== 'Escape' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
+      if (tab.el.classList.contains('no-results') || !results.contains(e.target)) return false;
+      if (runBtn.disabled) return false; // still running: the results are about to be shown
+      e.preventDefault();
+      closeResults(tab);
+      return true;
+    };
     tab.onShow = () => {
       tab.editor.focus();
       if (tab.grid) tab.grid.paint();
@@ -159,18 +173,26 @@
     const ta = tab.editor.ta;
     let a = ta.selectionStart;
     let b = ta.selectionEnd;
-    const whole = a === b;
-    if (whole) { a = 0; b = ta.value.length; }
-    const src = ta.value.slice(a, b);
+    const atCursor = a === b; // no selection: just the statement the cursor is in
+    if (atCursor) {
+      const st = tab.editor.currentStatement();
+      if (!st) return;
+      a = st.start; b = st.end;
+    }
+    const value = ta.value;
+    const src = value.slice(a, b);
     if (!src.trim()) return;
     try {
       const r = await api.formatSql(src, S.current && S.current.engine);
-      if (r.text !== src) {
+      if (ta.value !== value) return; // edited while formatting
+      const gap = tab.editor.gapAfter(b); // a blank line between this query and the next
+      const text = r.text + gap.extra;
+      if (text !== src || gap.swallow) {
         ta.focus();
-        ta.setSelectionRange(a, b);
-        tab.editor.insert(r.text); // one undo step (Ctrl+Z restores the original)
-        if (!whole) ta.setSelectionRange(a, a + r.text.length);
-        else ta.setSelectionRange(0, 0);
+        ta.setSelectionRange(a, b + gap.swallow);
+        tab.editor.insert(text); // one undo step (Ctrl+Z restores the original)
+        if (!atCursor) ta.setSelectionRange(a, a + r.text.length);
+        else ta.setSelectionRange(a, a);
         tab.editor.sync();
       }
       // Statements that can't be parsed (and PL/SQL blocks) are simply left as written, without a message.

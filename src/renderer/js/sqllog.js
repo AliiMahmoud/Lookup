@@ -1,5 +1,6 @@
-// Bottom panel listing the SQL Lookup ran by itself on this connection
-// (opening tables, counts, metadata, grid edits, structure changes, commits).
+// Bottom panel listing every SQL statement run on this connection: the user's queries from query tabs, and what
+// Lookup ran by itself (opening tables, counts, metadata, grid edits, structure changes, commits).
+// "Copy all" gives a script that runs again as is from a query tab.
 (function () {
   const { h, icon, toast } = window.U;
   const store = {
@@ -29,16 +30,23 @@
       return key === undefined ? m : literal(binds[key]);
     });
   }
-  function entryText(e) {
+  /** One log entry as SQL that runs again when pasted into a query tab: `stmt;`, or for an Oracle
+   *  PL/SQL block (BEGIN / DECLARE / CREATE PROCEDURE …) `… END;` and a `/` line, as SQL*Plus writes them. */
+  function entryText(e, dialect) {
     const meta = [stamp(e.at), `${e.ms ?? 0} ms`];
+    if (e.user) meta.push('query tab');
     if (e.rows !== undefined) meta.push(`${e.rows} row${e.rows === 1 ? '' : 's'}`);
     if (e.affected !== undefined) meta.push(`${e.affected} affected`);
-    let sql = inline(e.sql, e.binds).replace(/;\s*$/, '');
-    if (!/^(BEGIN|DECLARE)\b/i.test(sql) && !/END;\s*$/i.test(sql)) sql += ';';
+    let sql = inline(e.sql, e.binds).trim().replace(/\n\/\s*$/, '').trim();
+    const oracle = !dialect || dialect === 'oracle';
+    const st = oracle && window.SqlSplit ? window.SqlSplit.split(sql, 'oracle')[0] : null;
+    if (st && st.plsql) sql = (/;$/.test(sql) ? sql : sql + ';') + '\n/';
+    else sql = sql.replace(/;\s*$/, '') + ';';
     return `-- ${meta.join(' · ')}${e.error ? `\n-- ERROR ${e.error}` : ''}\n${sql}\n`;
   }
 
-  function create(host, api) {
+  function create(host, api, { dialect } = {}) {
+    const textOf = (e) => entryText(e, dialect ? dialect() : undefined);
     let open = false;
     let last = 0;
     let timer = null;
@@ -56,11 +64,11 @@
       handle,
       h('div', { class: 'sl-head' },
         icon('log'), h('span', { class: 'sl-title' }, 'SQL log'), countEl,
-        h('span', { class: 'muted sl-sub' }, 'statements Lookup ran for you · your own queries are not listed'),
+        h('span', { class: 'muted sl-sub' }, 'every statement run on this connection, yours and Lookup\'s'),
         h('div', { class: 'spacer' }),
         search,
         h('label', { class: 'check sm' }, hl, h('span', null, 'Syntax highlighting')),
-        h('button', { class: 'tool', title: 'Copy all', onclick: () => { api.copy(visible().map(entryText).join('\n')); toast('Copied', 'ok'); } }, icon('copy')),
+        h('button', { class: 'tool', title: 'Copy all', onclick: () => { api.copy(visible().map(textOf).join('\n')); toast('Copied', 'ok'); } }, icon('copy')),
         h('button', { class: 'tool', title: 'Clear', onclick: async () => { await api.sqlLogClear(); entries = []; paint(true); } }, icon('trash')),
         h('button', { class: 'tool', title: 'Close (Ctrl+Shift+L)', onclick: () => toggle(false) }, icon('x'))),
       pre);
@@ -91,7 +99,7 @@
       if (empty) empty.remove();
       for (let i = rendered; i < list.length; i++) {
         const e = list[i];
-        const text = entryText(e);
+        const text = textOf(e);
         const block = h('pre', { class: 'sl-entry' + (e.error ? ' err' : '') });
         if (highlight) block.innerHTML = window.SqlEditor.highlight(text).replace(/\n $/, '');
         else block.textContent = text;
@@ -99,7 +107,7 @@
       }
       rendered = list.length;
       while (pre.childElementCount > 1500) pre.firstChild.remove();
-      if (!list.length) pre.append(h('div', { class: 'empty-small' }, filter ? 'No matching statements' : 'Nothing yet. Open a table or its structure to see the SQL Lookup runs.'));
+      if (!list.length) pre.append(h('div', { class: 'empty-small' }, filter ? 'No matching statements' : 'Nothing yet. Run a query, or open a table or its structure.'));
       if (full || atBottom) pre.scrollTop = pre.scrollHeight;
     }
 
@@ -136,5 +144,5 @@
     return { toggle, reset, get open() { return open; } };
   }
 
-  window.SqlLog = { create, inline };
+  window.SqlLog = { create, inline, entryText };
 })();

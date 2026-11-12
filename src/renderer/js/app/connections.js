@@ -175,6 +175,7 @@
         row([mod, 'Enter'], 'Run statement'),
         row([mod, 'S'], 'Commit'),
         row([mod, 'B'], 'Beautify SQL'),
+        row([mod, 'L'], 'Query on one line'),
         row([mod, 'R'], 'Reconnect')));
   }
   async function deleteConn(c) {

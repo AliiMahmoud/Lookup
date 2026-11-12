@@ -8,6 +8,12 @@
   document.addEventListener('keydown', (e) => {
     if (!S.current || S.insight || document.querySelector('.modal-back') || e.defaultPrevented) return; // already handled (e.g. by the editor)
     const mod = e.ctrlKey || e.metaKey;
+    // Ctrl+F follows the focus: in the sidebar (clicked, so it holds the focus) it goes to the sidebar's filter box.
+    if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+      const sb = document.getElementById('sidebar');
+      const box = sb && sb.contains(document.activeElement) && sb.querySelector('#obj-filter, #m-filter, #r-filter');
+      if (box) { e.preventDefault(); box.focus(); box.select(); return; }
+    }
     const t = S.tabs.find((x) => x.id === S.active);
     if (t && t.onKey && t.onKey(e)) return;
     if (mod && !e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); Lookup.commitShortcut(); }

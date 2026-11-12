@@ -11,7 +11,7 @@
     <header id="titlebar" class="titlebar"></header>
     <div id="welcome" class="welcome hidden"></div>
     <div id="workspace" class="workspace hidden">
-      <aside id="sidebar" class="sidebar"></aside>
+      <aside id="sidebar" class="sidebar" tabindex="-1"></aside>
       <div id="sb-resizer" class="sb-resizer"></div>
       <main class="main">
         <div id="tabbar" class="tabbar"></div>
@@ -37,6 +37,7 @@
 
   <script src="../shared/sqlsplit.js"></script>
   <script src="js/util.js"></script>
+  <script src="js/undo.js"></script>
   <script src="js/editor.js"></script>
   <script src="js/grid.js"></script>
   <script src="js/export.js"></script>

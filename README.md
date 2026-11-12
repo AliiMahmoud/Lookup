@@ -216,7 +216,8 @@ If the cluster has replicas, forward and list them too. Lookup only sends comman
 
 ### SQL log
 
-- Every statement Lookup runs by itself (`Ctrl+Shift+L`), with bind values, duration and row counts; your own queries stay in Query history
+- Every statement run on the connection (`Ctrl+Shift+L`): your queries from query tabs and what Lookup runs by itself, with bind values, duration, row counts and errors
+- Copy all gives a script you can paste into a new query tab and run again (Oracle PL/SQL blocks end with `/`)
 
 
 
@@ -277,11 +278,15 @@ On a Mac, `⌘` works in place of `Ctrl`.
 | `Ctrl+P`                          | Open anything                    |
 | `Ctrl+Enter` / `Ctrl+Shift+Enter` | Run statement / run all          |
 | `Ctrl+B`                          | Beautify SQL                     |
+| `Ctrl+L`                          | Put the statement on one line    |
+| `Ctrl+F` in the SQL editor        | Find (`Enter` / `Shift+Enter`, `F3`: next / previous) |
 | `Ctrl+S`                          | Commit, or apply pending changes |
 | `Ctrl+Shift+E`                    | Export                           |
 | `Ctrl+R`                          | Reconnect                        |
 | `Ctrl+Shift+L`                    | Show / hide the SQL log          |
 | `Ctrl+F` / `F5`                   | Filter / refresh a table         |
+| `Ctrl+F` in the sidebar           | Filter the object list           |
+| `Esc` in query results            | Close the results                |
 | `Ctrl+Z` / `Ctrl+Y`               | Undo / redo grid changes         |
 | `Ctrl+D`                          | Duplicate the row in a table     |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0`    | Zoom in / out / reset            |

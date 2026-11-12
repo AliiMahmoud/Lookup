@@ -2,7 +2,7 @@
 
 /* ---------- Workspace ---------- */
 .workspace { flex: 1; display: flex; min-height: 0; }
-.sidebar { width: var(--sidebar-w); flex: 0 0 var(--sidebar-w); display: flex; flex-direction: column; background: var(--side); min-width: 0; }
+.sidebar { width: var(--sidebar-w); flex: 0 0 var(--sidebar-w); display: flex; flex-direction: column; background: var(--side); min-width: 0; outline: none; }
 .sb-resizer { width: 5px; margin-left: -3px; margin-right: -2px; cursor: col-resize; position: relative; z-index: 2; border-right: 1px solid var(--border); }
 .sb-resizer:hover { border-right-color: var(--accent); }
 .sb-top { padding: 10px 10px 6px; display: flex; flex-direction: column; gap: 6px; }
